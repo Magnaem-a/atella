@@ -1,0 +1,497 @@
+Here's the complete attribute reference for every member-area page. Organized by page so you can use it as a checklist while building each one.
+
+---
+
+# Atella — Member Page Attribute Reference
+
+Every attribute below is added in **Webflow Element Settings → Custom Attributes panel**. They render as real `data-*` and `ms-code-*` attributes on the published HTML.
+
+---
+
+## Sidebar (shared across all member pages)
+
+The sidebar lives on every member page. The only attributes here are member-data bindings.
+
+| Element | Attribute | Value |
+|---|---|---|
+| User card · Avatar `<img>` | `data-ms-member` | `profileImage` |
+| User card · Name text | `data-ms-member` | `firstName lastName` (or two separate elements) |
+| User card · Email text | `data-ms-member` | `email` |
+| Enrolled badge count | `data-ms-code` | `count` |
+| Enrolled badge wrapper | `ms-code-table` | `lesson_progress` |
+| Enrolled badge wrapper | `ms-code-owner-field` | `owner` |
+| Enrolled badge wrapper | `ms-code-distinct` | `course` *(counts unique courses with progress)* |
+| Saved badge count | `data-ms-code` | `count` |
+| Saved badge wrapper | `ms-code-table` | `saved_courses` |
+| Saved badge wrapper | `ms-code-owner-field` | `owner` |
+
+> **Note on Saved badge math:** Total = `saved_courses` count + `saved_lessons` count. You may need a small custom script for combined counts, or just show the larger of the two.
+
+---
+
+## Top bar (shared across all member pages)
+
+| Element | Attribute | Value |
+|---|---|---|
+| Avatar in top right | `data-ms-member` | `profileImage` |
+
+The page title and date can be hardcoded per-page or computed in custom JS — no Memberstack attributes needed.
+
+---
+
+## 1. Dashboard (`/dashboard`)
+
+### Welcome block
+
+| Element | Attribute | Value |
+|---|---|---|
+| "Good morning, [name]." heading text | `data-ms-member` | `firstName` |
+| Welcome narrative text (dynamic) | *(custom JS — reads `last_watched` lesson title and current time of day)* | — |
+
+### Stats strip
+
+Three count queries. Each stat needs its own `list-container` wrapper with a count target.
+
+**Stat 1 — Lessons done**
+| Element | Attribute | Value |
+|---|---|---|
+| Wrapper | `data-ms-code` | `list-container` |
+| Wrapper | `ms-code-table` | `lesson_progress` |
+| Wrapper | `ms-code-owner-field` | `owner` |
+| Wrapper | `ms-code-where` | `completed:1` |
+| Wrapper | `ms-code-mode` | `count` |
+| Number element inside | `data-ms-code` | `count-value` |
+
+**Stat 2 — Day streak**
+Custom JS computation (count consecutive days with `last_watched_at` activity). No standard MS attributes — write a memberscript that reads `lesson_progress` and computes the streak.
+
+**Stat 3 — Months a member**
+| Element | Attribute | Value |
+|---|---|---|
+| Number element | `data-ms-member` | `createdAt` |
+| | (formatted via JS to "X mo") | |
+
+### Continue card
+
+| Element | Attribute | Value |
+|---|---|---|
+| Card wrapper | `data-ms-code` | `list-container` |
+| Card wrapper | `ms-code-table` | `lesson_progress` |
+| Card wrapper | `ms-code-owner-field` | `owner` |
+| Card wrapper | `ms-code-where` | `completed:0` |
+| Card wrapper | `ms-code-sort` | `last_watched_at:desc` |
+| Card wrapper | `ms-code-per-page` | `1` |
+| Visible content (the populated card) | `data-ms-code` | `list-template` |
+| Lesson title text | `data-ms-field` | `lesson.title` |
+| | `ms-field` | `text` |
+| Module path text | `data-ms-field` | `lesson.module.title` (with course concat in JS) |
+| Course label "COURSE 02 · LESSON 04" | `data-ms-field` | `lesson.course.order` + `lesson.order` (computed) |
+| Time remaining | *custom calc — `lesson.duration_minutes - watched_seconds`* | — |
+| Progress bar fill | `data-ms-field` | `lesson.module.progress_percent` |
+| | `ms-field` | `style:width` |
+| Progress label "3 / 5 LESSONS" | *computed in custom script* | — |
+| Resume CTA link | `data-ms-code` | `detail-link` |
+| | `ms-code-detail-page` | `/lesson` |
+| | `ms-code-id-param` | `id` |
+| Empty state (when no in-progress lesson exists) | `data-ms-code` | `list-empty` |
+| Loading state | `data-ms-code` | `list-loading` |
+| Error state | `data-ms-code` | `list-error` |
+
+### Course progress grid (3 cards)
+
+| Element | Attribute | Value |
+|---|---|---|
+| Grid wrapper | `data-ms-code` | `list-container` |
+| Grid wrapper | `ms-code-table` | `courses` |
+| Grid wrapper | `ms-code-sort` | `order:asc` |
+| Grid wrapper | `ms-code-per-page` | `3` |
+| One card | `data-ms-code` | `list-template` |
+| Card → category pill | `data-ms-field` | `category` |
+| Card → status pill (Complete) | `data-ms-show-if` | `progress_percent` |
+| Card → status pill (Complete) | `data-ms-show-value` | `100` |
+| Card → status pill (In Progress) | *use custom JS — needs greater-than logic* | — |
+| Card → status pill (Not Started) | `data-ms-show-if` | `progress_percent` |
+| Card → status pill (Not Started) | `data-ms-show-value` | `0` |
+| Card title | `data-ms-field` | `title` |
+| Card description | `data-ms-field` | `description` |
+| Lessons count "10 / 10 LESSONS" | *computed via JS join with `lesson_progress`* | — |
+| Progress percent | *computed* | — |
+| Progress bar fill | `data-ms-field` | `progress_percent` (computed) |
+| | `ms-field` | `style:width` |
+| Card CTA | `data-ms-code` | `detail-link` |
+| | `ms-code-detail-page` | `/course` |
+| | `ms-code-id-param` | `id` |
+| Loading state (card skeleton ×3) | `data-ms-code` | `list-loading` |
+| Empty state | `data-ms-code` | `list-empty` |
+| Error state | `data-ms-code` | `list-error` |
+
+### Upcoming card
+
+If you decide to seed an `events` table later, this is the pattern. For now it's hardcoded.
+
+| Element | Attribute | Value |
+|---|---|---|
+| List wrapper | `data-ms-code` | `list-container` |
+| List wrapper | `ms-code-table` | `events` |
+| List wrapper | `ms-code-where` | `date:>=today` |
+| List wrapper | `ms-code-sort` | `date:asc` |
+| List wrapper | `ms-code-per-page` | `3` |
+| One row | `data-ms-code` | `list-template` |
+| Date day text "FRI" | `data-ms-field` | `date` + `ms-field="date"` (formatted) |
+| Date number "01" | `data-ms-field` | `date` |
+| Event title | `data-ms-field` | `title` |
+| Event time/topic | `data-ms-field` | `time_range` (and `topic` concat) |
+| Live badge | `data-ms-show-if` | `is_live` |
+| New badge | `data-ms-show-if` | `is_new` |
+| RSVP button | `data-ms-action` | `rsvp` *(custom)* |
+| Empty state | `data-ms-code` | `list-empty` |
+| Loading + error | `data-ms-code` | `list-loading` / `list-error` |
+
+### Activity card
+
+| Element | Attribute | Value |
+|---|---|---|
+| List wrapper | `data-ms-code` | `list-container` |
+| List wrapper | `ms-code-table` | `activity` |
+| List wrapper | `ms-code-owner-field` | `owner` |
+| List wrapper | `ms-code-sort` | `created_at:desc` |
+| List wrapper | `ms-code-per-page` | `5` |
+| One row | `data-ms-code` | `list-template` |
+| Description text | `data-ms-field` | `meta_text` |
+| Description text | `ms-field` | `text` |
+| Timestamp text | `data-ms-field` | `created_at` |
+| | `ms-field` | `date` (relative format via JS — "2 HOURS AGO") |
+| Row link | `data-ms-field` | `link_url` |
+| | `ms-field` | `link` |
+| Icon: lesson_complete | `data-ms-show-if` | `type` |
+| | `data-ms-show-value` | `lesson_complete` |
+| Icon: lesson_saved | `data-ms-show-if` | `type` |
+| | `data-ms-show-value` | `lesson_saved` |
+| Icon: comment_replied | `data-ms-show-if` | `type` |
+| | `data-ms-show-value` | `comment_replied` |
+| Icon: streak_milestone | `data-ms-show-if` | `type` |
+| | `data-ms-show-value` | `streak_milestone` |
+| Icon: course_complete | `data-ms-show-if` | `type` |
+| | `data-ms-show-value` | `course_complete` |
+| Icon: course_saved | `data-ms-show-if` | `type` |
+| | `data-ms-show-value` | `course_saved` |
+| Icon: office_hours | `data-ms-show-if` | `type` |
+| | `data-ms-show-value` | `office_hours_attended` |
+| Empty state | `data-ms-code` | `list-empty` |
+| Loading state | `data-ms-code` | `list-loading` |
+| Error state | `data-ms-code` | `list-error` |
+
+> Each icon variant is a separate element with its own `show-if`. Only the matching one renders per row.
+
+---
+
+## 2. All Courses (`/all-courses`)
+
+| Element | Attribute | Value |
+|---|---|---|
+| Grid wrapper | `data-ms-code` | `list-container` |
+| Grid wrapper | `ms-code-table` | `courses` |
+| Grid wrapper | `ms-code-sort` | `order:asc` |
+| Grid wrapper | `ms-code-filter-field` | `category` |
+| Grid wrapper | `ms-code-per-page` | `12` |
+| Filter tab "All" link | `href` | `?` (clears filter) |
+| Filter tab "Foundations" link | `href` | `?category=foundations` |
+| Filter tab "Craft" link | `href` | `?category=craft` |
+| Filter tab "Shipping" link | `href` | `?category=shipping` |
+| Active tab class | *toggled by JS reading URL param* | — |
+| One card | `data-ms-code` | `list-template` |
+| Card cover image | `data-ms-field` | `cover_image` |
+| | `ms-field` | `image` |
+| Card status pill | (same conditional pattern as dashboard course cards) | — |
+| Card category pill | `data-ms-field` | `category` |
+| Card title | `data-ms-field` | `title` |
+| Card description | `data-ms-field` | `description` |
+| Lessons count | `data-ms-field` | `lesson_count` |
+| Hours estimate | `data-ms-field` | `hours_estimate` |
+| Module preview rows (nested list) | *requires nested list-container with `ms-code-table="modules"` + `ms-code-filter-field="course"`* | — |
+| Card CTA link | `data-ms-code` | `detail-link` |
+| | `ms-code-detail-page` | `/course` |
+| | `ms-code-id-param` | `id` |
+| Empty state | `data-ms-code` | `list-empty` |
+| Loading state | `data-ms-code` | `list-loading` |
+| Error state | `data-ms-code` | `list-error` |
+| Pagination wrapper | `data-ms-code` | `list-pagination` |
+| Prev button | `data-ms-code` | `list-prev` |
+| Next button | `data-ms-code` | `list-next` |
+| "Page X of Y" | `data-ms-code` | `list-page-info` |
+
+**Catalog header stats**
+| Element | Attribute | Value |
+|---|---|---|
+| "3 courses" number | *count query on `courses`* | — |
+| "30 lessons" number | *count query on `lessons`* | — |
+| "~15 hours" | *sum query on `lessons.duration_minutes` via custom JS* | — |
+
+---
+
+## 3. Enrolled (`/enrolled`)
+
+Same as All Courses, but with an additional filter to only show courses the user has progress on.
+
+| Element | Attribute | Value |
+|---|---|---|
+| Grid wrapper | `data-ms-code` | `list-container` |
+| Grid wrapper | `ms-code-table` | `lesson_progress` |
+| Grid wrapper | `ms-code-owner-field` | `owner` |
+| Grid wrapper | `ms-code-distinct` | `course` *(unique courses only)* |
+| Grid wrapper | `ms-code-include` | `course` *(populates the joined course record)* |
+| Grid wrapper | `ms-code-sort` | `last_watched_at:desc` |
+| One card | `data-ms-code` | `list-template` |
+| Card → All bindings reference `course.title`, `course.description`, etc. | `data-ms-field` | `course.title` |
+| Card → Cover image | `data-ms-field` | `course.cover_image` |
+| Card → progress | *computed from joined `lesson_progress`* | — |
+| Empty state copy | "You're not enrolled yet. Start your first course →" | — |
+| Empty state CTA | links to `/all-courses` | — |
+
+> Alternative simpler pattern: query `courses` table normally, then filter in custom JS to only show courses where the user has at least one `lesson_progress` row. Easier than `distinct` + `include` joins.
+
+---
+
+## 4. Saved (`/saved`)
+
+Two separate `list-container` blocks on this page — one for saved courses, one for saved lessons.
+
+### Saved courses section
+
+| Element | Attribute | Value |
+|---|---|---|
+| Section wrapper | `data-ms-code` | `list-container` |
+| Section wrapper | `ms-code-table` | `saved_courses` |
+| Section wrapper | `ms-code-owner-field` | `owner` |
+| Section wrapper | `ms-code-include` | `course` |
+| Section wrapper | `ms-code-sort` | `saved_at:desc` |
+| One card | `data-ms-code` | `list-template` |
+| Card title | `data-ms-field` | `course.title` |
+| Card description | `data-ms-field` | `course.description` |
+| Card cover image | `data-ms-field` | `course.cover_image` |
+| | `ms-field` | `image` |
+| "Saved on" date | `data-ms-field` | `saved_at` |
+| | `ms-field` | `date` |
+| Continue button | `data-ms-code` | `detail-link` |
+| | `ms-code-detail-page` | `/course` |
+| | `ms-code-id-param` | `id` (uses `course.id`) |
+| Remove button | `data-ms-action` | `delete` |
+| Remove button | `data-ms-record-id` | *(auto-bound to current row's saved_courses record id)* |
+| Empty state | `data-ms-code` | `list-empty` |
+| Empty state copy | "Nothing saved yet. Bookmark courses as you go." | — |
+| Loading state | `data-ms-code` | `list-loading` |
+| Error state | `data-ms-code` | `list-error` |
+
+### Saved lessons section
+
+Same pattern, swap table:
+
+| Element | Attribute | Value |
+|---|---|---|
+| Section wrapper | `data-ms-code` | `list-container` |
+| Section wrapper | `ms-code-table` | `saved_lessons` |
+| Section wrapper | `ms-code-owner-field` | `owner` |
+| Section wrapper | `ms-code-include` | `lesson,course` |
+| Section wrapper | `ms-code-sort` | `saved_at:desc` |
+| Card title | `data-ms-field` | `lesson.title` |
+| Card course context | `data-ms-field` | `course.title` |
+| Card duration | `data-ms-field` | `lesson.duration_minutes` |
+| Continue button | `data-ms-code` | `detail-link` |
+| | `ms-code-detail-page` | `/lesson` |
+| | `ms-code-id-param` | `id` |
+| Remove button | `data-ms-action` | `delete` |
+
+---
+
+## 5. Course detail page (`/course?id=...`)
+
+| Element | Attribute | Value |
+|---|---|---|
+| Page wrapper | `data-ms-code` | `detail-container` |
+| Page wrapper | `ms-code-table` | `courses` |
+| Page wrapper | `ms-code-id-param` | `id` |
+| Hero title | `data-ms-field` | `title` |
+| Hero description | `data-ms-field` | `description` |
+| Hero category pill | `data-ms-field` | `category` |
+| Cover image | `data-ms-field` | `cover_image` |
+| | `ms-field` | `image` |
+| Lesson count | `data-ms-field` | `lesson_count` |
+| Hours estimate | `data-ms-field` | `hours_estimate` |
+| Modules wrapper (nested list) | `data-ms-code` | `list-container` |
+| Modules wrapper | `ms-code-table` | `modules` |
+| Modules wrapper | `ms-code-filter-field` | `course` |
+| Modules wrapper | `ms-code-filter-source` | `parent.id` *(auto-pulls course id from outer detail-container)* |
+| Modules wrapper | `ms-code-sort` | `order:asc` |
+| Module template | `data-ms-code` | `list-template` |
+| Module title | `data-ms-field` | `title` |
+| Module lesson count | `data-ms-field` | `lesson_count` |
+| Lessons within module (nested list) | `data-ms-code` | `list-container` |
+| Lessons wrapper | `ms-code-table` | `lessons` |
+| Lessons wrapper | `ms-code-filter-field` | `module` |
+| Lessons wrapper | `ms-code-filter-source` | `parent.id` |
+| Lessons wrapper | `ms-code-sort` | `order:asc` |
+| Lesson row link | `data-ms-code` | `detail-link` |
+| Lesson row link | `ms-code-detail-page` | `/lesson` |
+| Lesson row link | `ms-code-id-param` | `id` |
+| Save course button (form pattern) | `data-ms-code` | `form` |
+| Save form | `ms-code-table` | `saved_courses` |
+| Save form | `ms-code-owner-field` | `owner` |
+| Save form | `ms-code-linked-field` | `course` |
+| Save form | `data-ms-record-id` | `{course.id}` *(from outer detail context)* |
+| Save form | `ms-code-prevent-duplicates` | `true` |
+| Detail loading | `data-ms-code` | `detail-loading` |
+| Detail error | `data-ms-code` | `detail-error` |
+| Not found state | `data-ms-code` | `detail-not-found` |
+
+---
+
+## 6. Module detail page (`/module?id=...`)
+
+| Element | Attribute | Value |
+|---|---|---|
+| Page wrapper | `data-ms-code` | `detail-container` |
+| Page wrapper | `ms-code-table` | `modules` |
+| Page wrapper | `ms-code-id-param` | `id` |
+| Module title | `data-ms-field` | `title` |
+| Course breadcrumb | `data-ms-field` | `course.title` |
+| Lesson list (nested) | (same nested-list pattern as Course detail) | — |
+
+---
+
+## 7. Lesson detail page (`/lesson?id=...`)
+
+| Element | Attribute | Value |
+|---|---|---|
+| Page wrapper | `data-ms-code` | `detail-container` |
+| Page wrapper | `ms-code-table` | `lessons` |
+| Page wrapper | `ms-code-id-param` | `id` |
+| Lesson title | `data-ms-field` | `title` |
+| Lesson description | `data-ms-field` | `description` |
+| Module breadcrumb | `data-ms-field` | `module.title` |
+| Course breadcrumb | `data-ms-field` | `course.title` |
+| Video embed | `data-ms-field` | `video_url` |
+| | `ms-field` | `embed` |
+| Duration | `data-ms-field` | `duration_minutes` |
+| Mark complete button (edit pattern) | `data-ms-code` | `edit-container` |
+| | `ms-code-table` | `lesson_progress` |
+| Submit button | `data-ms-action` | `submit` |
+| Submit button | `data-ms-record-id` | `{lesson.id}` |
+| Hidden field "lesson" | `data-ms-field` | `lesson` |
+| Hidden field "course" | `data-ms-field` | `course` |
+| Hidden field "owner" | `data-ms-field` | `owner` |
+| Hidden field "completed" | `data-ms-field` | `completed` (value: `1`) |
+| Hidden field "completed_at" | `data-ms-field` | `completed_at` (auto-set to now) |
+| Save lesson button | `data-ms-code` | `form` |
+| | `ms-code-table` | `saved_lessons` |
+| | `ms-code-owner-field` | `owner` |
+| | `ms-code-linked-field` | `lesson` |
+| | `ms-code-prevent-duplicates` | `true` |
+
+---
+
+## 8. Content Gating (plan-based access control)
+
+Gating is configured entirely through attributes and a data table field. No plan names or tier structures are hardcoded. Works with any Memberstack plan setup — tiered, per-course, or mixed.
+
+### Setup
+
+1. Add an `access_plans` field (or any name you choose) to the `courses` table in Memberstack.
+2. For gated courses, paste the Memberstack plan IDs that grant access (comma-separated, e.g. `pln_abc123, pln_def456`).
+3. Leave the field blank for courses open to all logged-in members.
+4. Load `access-gate.js` before your page scripts (same as `MSDataCache`).
+
+### Page wrapper attributes
+
+| Element | Attribute | Value | Purpose |
+|---|---|---|---|
+| Page wrapper | `ms-code-access-field` | `access_plans` | Name of the course data field that stores required plan IDs. Omit to disable gating. |
+| Page wrapper | `ms-code-upgrade-url` | `/pricing` | URL for the upgrade CTA. Defaults to `/pricing` if omitted. |
+
+### Locked state elements
+
+| Element | Attribute | Value | Where |
+|---|---|---|---|
+| Locked overlay/block | `data-ms-code` | `locked` | Course detail page, lesson detail page. Hidden by default (`style="display:none"`). Shown when member lacks access. |
+| Upgrade CTA link | `data-ms-code` | `upgrade-link` | Inside the locked block. Script auto-sets `href` to `ms-code-upgrade-url`. |
+| Card lock indicator | `data-ms-code` | `card-locked` | Inside each course card template on saved-courses page. Shown per-card when that course is gated. |
+
+### Course detail page (`/course`)
+
+Add to the existing page wrapper:
+
+| Element | Attribute | Value |
+|---|---|---|
+| Page wrapper | `ms-code-access-field` | `access_plans` |
+| Page wrapper | `ms-code-upgrade-url` | `/pricing` |
+
+Add a locked state block (hidden by default):
+
+```html
+<div data-ms-code="locked" style="display:none">
+  <h2>This course requires a membership upgrade</h2>
+  <p>Upgrade your plan to access this course and all its lessons.</p>
+  <a href="/pricing" data-ms-code="upgrade-link" class="button">View plans</a>
+</div>
+```
+
+When a member lacks access, the script still renders the course preview (title, description, cover image, category, order) but skips the curriculum, enrollment, and action buttons. The locked block is shown instead.
+
+### Lesson detail page (`/lesson`)
+
+Add to the existing page wrapper:
+
+| Element | Attribute | Value |
+|---|---|---|
+| Page wrapper | `ms-code-access-field` | `access_plans` |
+| Page wrapper | `ms-code-upgrade-url` | `/pricing` |
+
+Add a locked state block (same pattern):
+
+```html
+<div data-ms-code="locked" style="display:none">
+  <h2>This lesson is part of a gated course</h2>
+  <a href="/pricing" data-ms-code="upgrade-link" class="button">Upgrade to access</a>
+</div>
+```
+
+Lessons inherit their parent course's access requirement. The script checks the course's `access_plans` field, not the lesson's.
+
+### Saved courses page (`/saved`)
+
+Add to the existing page wrapper:
+
+| Element | Attribute | Value |
+|---|---|---|
+| Page wrapper | `ms-code-access-field` | `access_plans` |
+| Page wrapper | `ms-code-upgrade-url` | `/pricing` |
+
+Inside the course card template, add a lock indicator (hidden by default):
+
+```html
+<div data-ms-code="card-locked" style="display:none">
+  <span>Upgrade to access</span>
+  <a href="#" data-ms-code="upgrade-link">View plans</a>
+</div>
+```
+
+Members can still save gated courses (wishlist behavior). The card-locked element shows per-card when the member's plan doesn't match.
+
+### How gating flows
+
+- **No `ms-code-access-field` attribute** → gating is completely disabled, all content accessible.
+- **Attribute present but course field is empty** → that specific course is open to all members.
+- **Attribute present and course field has plan IDs** → only members with a matching `planConnection` see full content; others see the locked state.
+- **`access-gate.js` not loaded** → gating is skipped silently; scripts render normally.
+
+---
+
+## Quick rules to remember
+
+1. **Every list-container** needs all four state children: `list-template`, `list-empty`, `list-loading`, `list-error`. Skip any one and your build looks broken in that state.
+2. **Every detail-container** needs `detail-loading`, `detail-error`, optional `detail-not-found`.
+3. **Field bindings** read from `data-ms-field`. The `ms-field` attribute (not `data-ms-field`) sets *how* it's rendered: `text` (default), `image`, `link`, `date`, `number`, `embed`, `style:width`.
+4. **Conditional show/hide** uses `data-ms-show-if` + `data-ms-show-value`. Both attributes go on the same element.
+5. **Nested lists** use `ms-code-filter-source="parent.id"` to inherit the outer record's ID — that's how the modules-inside-course pattern works.
+6. **Custom logic** (streaks, computed counts, joins, distinct) needs a small custom memberscript. The data-ms attribute system covers the basics — joins and aggregations need help.
+7. **Content gating** uses `ms-code-access-field` + `ms-code-upgrade-url` on the page wrapper, and `data-ms-code="locked"` / `data-ms-code="card-locked"` elements. See section 8 above.
+

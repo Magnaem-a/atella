@@ -1,0 +1,461 @@
+# Script Authoring Guide
+
+## 1. Header Format
+
+Every script starts with a comment header identifying it.
+
+```html
+<!-- 💙 Script v0.1 💙 DESCRIPTION -->
+```
+
+## 2. Script Structure
+
+- Wrap all code in `<script>` tags.
+- Initialize with `document.addEventListener("DOMContentLoaded", ...)`.
+- Optionally wrap in an IIFE: `(function() { 'use strict'; ... })();`.
+- Keep scripts under 600 lines.
+- Never use classes or emojis in scripts.
+- Keep workspace file naming consistent 
+- Group related functionality together.
+- Use helper functions for repeated logic.
+- Add comments explaining complex sections.
+
+## 3. Configuration
+
+- Place a `CONFIG` object at the top for customizable settings.
+- Include sensible defaults that can be overridden via HTML attributes.
+
+## 4. Memberstack Integration
+
+- Check for `window.$memberstackDom` before use.
+- Get the current member: `var memberResult = await memberstack.getCurrentMember();`
+- Handle both response shapes: `var member = memberResult?.data || memberResult;`
+- Always verify the member is logged in before performing operations.
+- Reference custom fields with `data-ms-member=`.
+- Use Memberstack features like data tables where appropriate.
+
+## 5. Error Handling
+
+- Use `try-catch` blocks around all async operations.
+- Log errors with `console.error()` or `console.warn()`.
+- Show user-friendly error messages in the UI.
+- Gracefully handle missing elements and attributes.
+
+## 6. User Feedback
+
+- Show loading states (disable buttons, change text) during async operations.
+- Display success and error messages with clear styling.
+- Use animations (fade-in/fade-out) for transient messages.
+
+## 7. Form Handling
+
+- Prevent default form submission.
+- Validate inputs before processing.
+- Reset form fields after successful submission.
+- Show loading states during async operations.
+
+## 8. Styling
+
+- Use inline styles for dynamic elements.
+- Add `<style>` tags for animations if needed.
+- Use consistent color schemes (green for success, red for error, etc.).
+
+## 9. Global Functions
+
+- Expose reusable functions to `window` for cross-script use.
+
+## 10. Admin API
+
+If a script requires the Admin API, clearly indicate where sensitive credentials should be placed so they can be loaded securely.
+
+## 11. External Dependencies
+
+Limit the use of webhooks, Make.com, and Zapier as much as possible. Prefer native Memberstack features and client-side logic.
+
+---
+
+# Data Tables Reference
+
+This section only applies to scripts that use Memberstack Data Tables. It covers the HTML attribute system for wiring UI elements and the JavaScript API for CRUD operations.
+
+---
+
+## HTML Attribute System
+
+A small set of attributes to wire list, detail, form, edit, limit, and chart UIs to any data table without custom code per screen. One attribute equals one concern.
+
+### Three Kinds of Attributes
+
+| Kind | Purpose | Example |
+| --- | --- | --- |
+| `data-ms-code` | Role -- identifies the element (container, template, loading, error, etc.). | `data-ms-code="list-container"` |
+| `ms-code-*` | Config -- table name, field names, URLs, options. One attribute per setting. | `ms-code-table="my-table"` |
+| `data-ms-field` + `ms-field` | Field binding -- which record field to show or edit, and how. | `data-ms-field="title"` `ms-field="text"` |
+
+Scripts find elements by role and read config from the same element. No duplicate or overlapping config attributes.
+
+### Configuration Attributes
+
+Place these on the container that drives the behaviour (form, list wrapper, detail wrapper, chart wrapper).
+
+| Attribute | Purpose | Example / Default |
+| --- | --- | --- |
+| `ms-code-table` | Which data table (collection) to use. | Any table name |
+| `ms-code-owner-field` | Field that stores the current user's ID (for "my records" and permission). | Any field name |
+| `ms-code-id-param` | URL query param that holds the record ID. | `id` (so `?id=abc123`) |
+| `ms-code-detail-page` | Base URL for "view one record" links. | Any page path |
+| `ms-code-redirect` | Where to send the user after create, update, or delete. | Any page path |
+| `ms-code-filter-field` | (Lists) Filter by this field; value comes from URL param. | Any field name |
+| `ms-code-sort` | (Lists) Sort order. | `field:asc` or `field:desc` |
+| `ms-code-per-page` | (Lists) Rows per page. | `10` |
+| `ms-code-linked-field` | (Create form) Field that stores a related record ID. | Any field name |
+| `ms-code-prevent-duplicates` | (Create form) Block duplicate records (same user + same linked ID). | `true` |
+| `ms-code-limit` | (Quota) Max number of records that count toward the limit. | Any number |
+| `ms-code-limit-when` | (Quota) Only count records where a field has a specific value. | `field:value` |
+| `ms-code-unlimited` | (Quota) Comma-separated plan/role IDs that skip the limit. | Plan IDs |
+| `ms-code-chart-type` | (Chart) Kind of chart. | `bar`, `line`, `doughnut` |
+| `ms-code-group` | (Chart) Field to group by, or `month`/`week` for time. | Any field name |
+| `ms-code-date-field` | (Chart) Field used for time grouping. | Any date field |
+| `ms-code-value-field` | (Chart) Sum this number instead of counting. | Any numeric field |
+| `ms-code-join` | (Chart) Data via another table: `table:field`. | `table:field` |
+| `ms-code-label-field` | (Chart) Show this field from the joined table as axis label. | Any field name |
+| `ms-code-max-records` | (Chart) Max records to load. | `100` |
+
+Rules: Use one attribute per setting. Reuse the same name everywhere (e.g. `ms-code-id-param` for detail, edit, and list filter). Use `ms-code-owner-field` both for "who owns this record" and "set current user on create".
+
+### Element Roles (`data-ms-code`)
+
+Scripts look for these values to find the right DOM nodes. One role per purpose.
+
+| Role | Values |
+| --- | --- |
+| List | `list-container`, `list-template`, `list-loading`, `list-empty`, `list-error`, `list-pagination`, `list-prev`, `list-next`, `list-page-info`, `detail-link` |
+| Detail | `detail-container`, `detail-loading`, `detail-error`, `detail-content`, `array-template` |
+| Form (create) | `form`, `form-loading`, `form-success`, `form-error`, `limit-banner` |
+| Edit | `edit-container`, `edit-loading`, `edit-error`, `edit-content`, `edit-not-owner`, `confirm-delete` |
+| Chart | `analytics-chart`, `analytics-canvas`, `analytics-loading`, `analytics-error` |
+
+State indicators: forms can receive `data-ms-code-limit-reached="true"` when a limit is hit. Charts can receive `data-ms-code-state="loading"`, `"error"`, or `"content"`. Style these in CSS.
+
+### Field Binding and Behaviour
+
+| Attribute | Purpose |
+| --- | --- |
+| `data-ms-field` | Record field name. Script sets or reads this field. |
+| `ms-field` | How to handle it: `text`, `html`, `date`, `image`, `link`, `number`, `checkbox`, `array`. Default `text`. |
+| `data-ms-show-if` | Show element only when this field equals `data-ms-show-value` (or is not empty if no value set). |
+| `data-ms-hide-if` | Hide element when this field equals `data-ms-hide-value` (or is not empty). |
+| `data-ms-hide-empty` | If `true`, hide when the bound field is empty. |
+| `data-ms-action` | Element triggers an action: `submit`, `apply`, `delete`, `delete-yes`, `delete-no`, `status`. |
+| `data-ms-record-id` | Holds a record ID (e.g. parent ID for a create form). |
+
+For inline edit UIs, use `data-ms-edit` with the field name and optional `ms-edit-type` (`text`, `richtext`, `select`), `ms-edit-placeholder`, `ms-edit-required`.
+
+### Use Cases (Minimal Setup)
+
+| Use Case | Container Attributes | Element Roles |
+| --- | --- | --- |
+| List ("My records") | `ms-code-table`, `ms-code-owner-field`, `ms-code-detail-page`, optional: `ms-code-sort`, `ms-code-per-page` | list-container, list-template, list-loading, list-empty, list-error, list-pagination, detail-link |
+| Filtered list (by URL param) | Same as list + `ms-code-filter-field` | Same as list |
+| Detail (one record by ID) | `ms-code-table`, `ms-code-id-param`, optional: `ms-code-owner-field`, `ms-code-redirect` | detail-container, detail-loading, detail-error, detail-content |
+| Create form | `ms-code-table`, `ms-code-owner-field`, optional: `ms-code-redirect`, `ms-code-linked-field`, `ms-code-prevent-duplicates` | form, form-loading, form-success, form-error |
+| Quota limit | Same as form + `ms-code-limit`, `ms-code-limit-when`, `ms-code-unlimited` | Same as form + limit-banner |
+| Edit (update/delete) | `ms-code-table`, `ms-code-id-param`, `ms-code-owner-field`, optional: `ms-code-redirect` | edit-container, edit-loading, edit-error, edit-content, edit-not-owner, confirm-delete |
+| Chart | `ms-code-table`, `ms-code-chart-type`, `ms-code-group`, optional: `ms-code-owner-field`, `ms-code-date-field`, `ms-code-value-field`, `ms-code-join`, `ms-code-label-field`, `ms-code-max-records` | analytics-chart, analytics-canvas, analytics-loading, analytics-error |
+
+### Attribute Quick Reference
+
+- **Roles** (`data-ms-code`) = which block is this (container, template, loading, error, etc.).
+- **Config** (`ms-code-*`) = one attribute per setting (table, owner field, ID param, detail page, redirect, filter, sort, limit, chart options).
+- **Fields** (`data-ms-field`, `ms-field`) = bind a DOM element to a record field and define how to render or edit it.
+- **Conditionals** (`data-ms-show-if`, `data-ms-hide-if`, `data-ms-hide-empty`) = show or hide by field value.
+- **Actions** (`data-ms-action`, `data-ms-record-id`) = buttons and record context.
+
+Keep one attribute per concern so the same names work across list, detail, form, edit, limit, and chart UIs with any data table backend.
+
+---
+
+## JavaScript API
+
+### Field Types
+
+| Type | Usage | Example |
+| --- | --- | --- |
+| TEXT | Standard text fields. | `{ title: 'My Title' }` |
+| NUMBER | Numeric values. | `{ count: 5 }` |
+| MEMBER_REFERENCE | Links to a member. Use the member ID directly. | `{ owner: member.id }` |
+| REFERENCE | Links to another record. Try direct ID, fall back to object. | `{ parent: recordId }` or `{ parent: { id: recordId } }` |
+| DATE | ISO 8601 date strings. | `{ created_at: new Date().toISOString() }` |
+
+### Creating Records
+
+Use `createDataRecord` to add new records to a table.
+
+```javascript
+var result = await memberstack.createDataRecord({
+  table: 'table_name',
+  data: {
+    field1: 'value1',
+    field2: 'value2',
+  },
+});
+
+var record = result.data;
+var recordId = record.id;
+```
+
+### Handling REFERENCE Fields
+
+REFERENCE fields link to other records. Try the direct ID first, then fall back to object format.
+
+```javascript
+try {
+  result = await memberstack.createDataRecord({
+    table: 'table_name',
+    data: {
+      parent_record: parentId,       // Direct ID (preferred)
+      owner: member.id,              // MEMBER_REFERENCE uses direct ID
+      content: 'Some content',
+      created_at: new Date().toISOString(),
+    },
+  });
+} catch (err) {
+  result = await memberstack.createDataRecord({
+    table: 'table_name',
+    data: {
+      parent_record: { id: parentId }, // Object format (fallback)
+      owner: member.id,
+      content: 'Some content',
+      created_at: new Date().toISOString(),
+    },
+  });
+}
+```
+
+### Updating Records
+
+Use `updateDataRecord` to modify existing records. Only include fields you want to change.
+
+```javascript
+var result = await memberstack.updateDataRecord({
+  recordId: 'record_id_here',
+  data: {
+    status: 'new_status',
+    updated_at: new Date().toISOString(),
+  },
+});
+
+var updatedRecord = result.data;
+```
+
+To clear a field, set it to `null`:
+
+```javascript
+await memberstack.updateDataRecord({
+  recordId: recordId,
+  data: {
+    assigned_member: null,
+    updated_at: new Date().toISOString(),
+  },
+});
+```
+
+### Querying Records
+
+Use `queryDataRecords` for filtering, sorting, and pagination. Handle different response shapes: `result.data?.records || result.data || []`.
+
+```javascript
+var result = await memberstack.queryDataRecords({
+  table: 'table_name',
+  query: {
+    where: {
+      owner: { equals: member.id },
+    },
+    orderBy: { created_at: 'desc' },
+    take: 100,
+  },
+});
+
+if ('records' in (result.data || {})) {
+  var records = (result.data).records || [];
+}
+```
+
+### Complex Filtering
+
+Build `where` clauses dynamically based on your needs.
+
+```javascript
+var where = {};
+
+if (filterByOwner) {
+  where.owner = { equals: member.id };
+}
+if (filterStatus) {
+  where.status = { equals: filterStatus };
+}
+if (filterCategory) {
+  where.category = { equals: filterCategory };
+}
+
+var query = {
+  orderBy: { created_at: 'desc' },
+  take: 100,
+};
+
+if (Object.keys(where).length > 0) {
+  query.where = where;
+}
+
+var result = await memberstack.queryDataRecords({
+  table: 'table_name',
+  query: query,
+});
+```
+
+### Getting a Single Record
+
+Use `getDataRecord` to fetch one record by ID.
+
+```javascript
+var result = await memberstack.getDataRecord({
+  recordId: 'record_id_here',
+});
+
+var record = result.data;
+var fieldValues = record.data;
+```
+
+Or query by ID:
+
+```javascript
+var result = await memberstack.queryDataRecords({
+  table: 'table_name',
+  query: {
+    where: { id: { equals: recordId } },
+    take: 1,
+  },
+});
+
+if ('records' in (result.data || {})) {
+  var record = (result.data).records[0] || null;
+}
+```
+
+### Pagination and Bulk Loading
+
+When you need more than 100 records, paginate using `skip`. Memberstack limits `take` to 1-100.
+
+```javascript
+var PAGE_SIZE = 100;
+
+async function fetchAllRecords(memberstack, table, where) {
+  var all = [];
+  var skip = 0;
+  var page = [];
+
+  do {
+    var result = await memberstack.queryDataRecords({
+      table: table,
+      query: {
+        where: where,
+        take: PAGE_SIZE,
+        skip: skip,
+      },
+    });
+
+    page = (result.data)?.records || [];
+    all.push.apply(all, page);
+    skip += page.length;
+  } while (page.length === PAGE_SIZE);
+
+  return all;
+}
+```
+
+Prefer a single bulk load over per-item queries:
+
+```javascript
+// Instead of querying once per UI element, load all records and map them
+var records = await fetchAllRecords(memberstack, 'table_name', {
+  owner: { equals: member.id },
+});
+
+var byRelatedId = {};
+records.forEach(function(r) {
+  var related = r.data?.related_field;
+  var id = related && (related.id || related);
+  if (id) byRelatedId[id] = r.id;
+});
+```
+
+### Query Operators
+
+| Operator | Description | Example |
+| --- | --- | --- |
+| `equals` | Exact match (also works with `null`). | `{ status: { equals: 'active' } }` |
+| `notEquals` | Not equal. | `{ status: { notEquals: 'closed' } }` |
+| `contains` | Text contains substring. | `{ title: { contains: 'search' } }` |
+| `startsWith` | Text starts with value. | `{ title: { startsWith: 'A' } }` |
+| `endsWith` | Text ends with value. | `{ title: { endsWith: 'Z' } }` |
+| `greaterThan` | Greater than. | `{ count: { greaterThan: 5 } }` |
+| `lessThan` | Less than. | `{ count: { lessThan: 10 } }` |
+| `in` | Matches any value in array. | `{ status: { in: ['a', 'b'] } }` |
+| `notIn` | Matches none of the values. | `{ status: { notIn: ['x'] } }` |
+
+### Data Table Error Handling
+
+For critical operations, throw on failure:
+
+```javascript
+try {
+  var result = await memberstack.createDataRecord({
+    table: 'table_name',
+    data: recordData,
+  });
+  return result.data;
+} catch (error) {
+  throw new Error(error?.message || 'Failed to create record');
+}
+```
+
+For non-critical operations (e.g. logging), catch silently and continue:
+
+```javascript
+try {
+  await memberstack.createDataRecord({
+    table: 'audit_log',
+    data: logData,
+  });
+} catch (logError) {
+  // Logging failed but main operation succeeded -- continue
+}
+```
+
+For tables that may not exist yet, degrade gracefully:
+
+```javascript
+try {
+  var result = await memberstack.queryDataRecords({
+    table: 'table_name',
+    query: { take: 100 },
+  });
+  return result.data?.records || [];
+} catch (error) {
+  if (error?.message?.includes('not found') ||
+      error?.message?.includes('does not exist')) {
+    return [];
+  }
+  return [];
+}
+```
+
+### Common Issues and Solutions
+
+**REFERENCE field not working:** Try both direct ID and object format. Direct ID is preferred; object format (`{ id: recordId }`) is the fallback.
+
+**Query returns empty results:** Verify field names match exactly, check access rules, and ensure you wrap values in an operator. Use `{ field: { equals: value } }`, not `{ field: value }`.
+
+**Cannot update record:** Verify update permissions and use `recordId` as a parameter, not inside the `data` object.
+
+**MEMBER_REFERENCE field not linking:** Use the member ID directly (`member.id`), not wrapped in an object.
