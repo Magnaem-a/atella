@@ -515,6 +515,7 @@
     var ms = window.$memberstackDom;
     var tableCourse = C.tableAttr('ms-code-table-course', 'courses');
     var tableLesson = C.tableAttr('ms-code-table-lesson', 'lessons');
+    var tableModule = C.tableAttr('ms-code-table-module', 'modules');
     var tableProgress = C.tableAttr('ms-code-table-progress', 'lesson_progress');
     try {
       var member = await window.MSDataCache.getMember(ms);
@@ -522,9 +523,10 @@
       var loaded = await Promise.all([
         window.MSDataCache.load(ms, tableCourse, null),
         window.MSDataCache.load(ms, tableLesson, null),
+        window.MSDataCache.load(ms, tableModule, null),
         window.MSDataCache.load(ms, tableProgress, { owner: { equals: member.id } })
       ]);
-      paintCourseGrid({ courses: loaded[0], lessons: loaded[1], progress: loaded[2] });
+      paintCourseGrid({ courses: loaded[0], lessons: loaded[1], modules: loaded[2], progress: loaded[3] });
     } catch (err) {
       console.error('[dashboard-courses] boot failed', err);
       state.showError();
@@ -603,7 +605,73 @@
         : 'Get started';
     }
 
+    // Next-pending lesson info — only meaningful for in_progress cards. Tokens:
+    //   [data-ms-code="next-lesson-title"]   → "Streaming and response handling"
+    //   [data-ms-code="next-lesson-meta"]    → "Module 02 · Lesson 03"
+    //   [data-ms-code="remaining-lessons"]   → "7 left"
+    paintNextLesson(card, course, data, status, stats);
+
     setDetailLinks(card, course.id);
+  }
+
+  /** Resolve and write the "what's next" labels on an in-progress card. */
+  function paintNextLesson(card, course, data, status, stats) {
+    var titleEl = card.querySelector('[data-ms-code="next-lesson-title"]');
+    var metaEl = card.querySelector('[data-ms-code="next-lesson-meta"]');
+    var remainEl = card.querySelector('[data-ms-code="remaining-lessons"]');
+    if (!titleEl && !metaEl && !remainEl) return;
+
+    // Hide all three on cards where "next" doesn't apply.
+    if (status !== 'in_progress') {
+      [titleEl, metaEl, remainEl].forEach(function (el) { if (el) el.style.display = 'none'; });
+      return;
+    }
+
+    var courseId = course.id;
+    var modules = (data.modules || [])
+      .filter(function (m) { return idOf(m.data.course) === courseId; })
+      .sort(function (a, b) { return (a.data.order || 0) - (b.data.order || 0); });
+    var modOrder = Object.create(null);
+    modules.forEach(function (m) { modOrder[m.id] = m.data.order || 0; });
+
+    var courseLessons = data.lessons
+      .filter(function (l) { return idOf(l.data.course) === courseId; })
+      .sort(function (a, b) {
+        var modA = modOrder[idOf(a.data.module)] || 0;
+        var modB = modOrder[idOf(b.data.module)] || 0;
+        if (modA !== modB) return modA - modB;
+        return (a.data.order || 0) - (b.data.order || 0);
+      });
+
+    var completed = Object.create(null);
+    data.progress.forEach(function (p) {
+      if (idOf(p.data.course) === courseId && (p.data.completed | 0) === 1) {
+        completed[idOf(p.data.lesson)] = true;
+      }
+    });
+
+    var nextLesson = courseLessons.filter(function (l) { return !completed[l.id]; })[0];
+    if (!nextLesson) {
+      [titleEl, metaEl, remainEl].forEach(function (el) { if (el) el.style.display = 'none'; });
+      return;
+    }
+
+    [titleEl, metaEl, remainEl].forEach(function (el) { if (el) el.style.removeProperty('display'); });
+
+    if (titleEl) titleEl.textContent = nextLesson.data.title || '';
+
+    if (metaEl) {
+      var mod = modules.find(function (m) { return m.id === idOf(nextLesson.data.module); });
+      var parts = [];
+      if (mod) parts.push('Module ' + C.pad2(mod.data.order));
+      parts.push('Lesson ' + C.pad2(nextLesson.data.order));
+      metaEl.textContent = parts.join(' · ');
+    }
+
+    if (remainEl) {
+      var remaining = Math.max(0, (stats.total || 0) - (stats.completed || 0));
+      remainEl.textContent = remaining + (remaining === 1 ? ' lesson left' : ' lessons left');
+    }
   }
 
   /** Show only the variant nodes whose data-ms-show-value matches the active value. */
