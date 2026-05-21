@@ -629,24 +629,24 @@
 
     var courseId = course.id;
     var modules = (data.modules || [])
-      .filter(function (m) { return idOf(m.data.course) === courseId; })
+      .filter(function (m) { return C.idOf(m.data.course) === courseId; })
       .sort(function (a, b) { return (a.data.order || 0) - (b.data.order || 0); });
     var modOrder = Object.create(null);
     modules.forEach(function (m) { modOrder[m.id] = m.data.order || 0; });
 
     var courseLessons = data.lessons
-      .filter(function (l) { return idOf(l.data.course) === courseId; })
+      .filter(function (l) { return C.idOf(l.data.course) === courseId; })
       .sort(function (a, b) {
-        var modA = modOrder[idOf(a.data.module)] || 0;
-        var modB = modOrder[idOf(b.data.module)] || 0;
+        var modA = modOrder[C.idOf(a.data.module)] || 0;
+        var modB = modOrder[C.idOf(b.data.module)] || 0;
         if (modA !== modB) return modA - modB;
         return (a.data.order || 0) - (b.data.order || 0);
       });
 
     var completed = Object.create(null);
     data.progress.forEach(function (p) {
-      if (idOf(p.data.course) === courseId && (p.data.completed | 0) === 1) {
-        completed[idOf(p.data.lesson)] = true;
+      if (C.idOf(p.data.course) === courseId && (p.data.completed | 0) === 1) {
+        completed[C.idOf(p.data.lesson)] = true;
       }
     });
 
@@ -661,7 +661,7 @@
     if (titleEl) titleEl.textContent = nextLesson.data.title || '';
 
     if (metaEl) {
-      var mod = modules.find(function (m) { return m.id === idOf(nextLesson.data.module); });
+      var mod = modules.find(function (m) { return m.id === C.idOf(nextLesson.data.module); });
       var parts = [];
       if (mod) parts.push('Module ' + C.pad2(mod.data.order));
       parts.push('Lesson ' + C.pad2(nextLesson.data.order));
