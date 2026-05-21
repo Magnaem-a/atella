@@ -1263,26 +1263,40 @@
   }
 
   function resolveResumeLesson(enrollment, lessons, progress) {
-    // Priority 1: explicit current_lesson on enrollment.
+    // Build the completed-lesson set so we never resume to a finished lesson.
+    var completedIds = Object.create(null);
+    progress.forEach(function (p) {
+      if ((p.data.completed | 0) === 1) completedIds[idOf(p.data.lesson)] = true;
+    });
+
+    // Priority 1: explicit current_lesson on enrollment — but only if it's
+    // not already completed. Stale enrolment pointers (e.g. set at enrol time
+    // and never updated) used to keep the CTA stuck on "Lesson 01".
     if (enrollment) {
       var ids = arrayOfIds(enrollment.data.current_lesson);
       for (var i = 0; i < ids.length; i++) {
+        if (completedIds[ids[i]]) continue;
         var hit = lessons.find(function (l) { return l.id === ids[i]; });
         if (hit) return hit;
       }
     }
+    // Priority 2: most recently touched incomplete progress row.
     var sorted = progress.slice().sort(function (a, b) {
       return tsOf(b.data.last_watched_at || b.data.completed_at) - tsOf(a.data.last_watched_at || a.data.completed_at);
     });
-    // Priority 2: most recently touched incomplete lesson.
     for (var j = 0; j < sorted.length; j++) {
       if ((sorted[j].data.completed | 0) === 1) continue;
       var lid = idOf(sorted[j].data.lesson);
       var lesson = lessons.find(function (l) { return l.id === lid; });
       if (lesson) return lesson;
     }
-    // Priority 3: first lesson as a safe fallback.
-    return lessons[0] || null;
+    // Priority 3: first lesson the member hasn't completed yet (lessons here
+    // are already ordered by module → lesson).
+    for (var k = 0; k < lessons.length; k++) {
+      if (!completedIds[lessons[k].id]) return lessons[k];
+    }
+    // All lessons completed → resume points at the last one for "Re-watch".
+    return lessons[lessons.length - 1] || null;
   }
 
   // ============= CURRICULUM =============
@@ -2160,7 +2174,7 @@
     paintVideo(root, lesson);
     paintBreakdown(root, lesson, data.breakdown);
     paintResources(root, lesson, data.references);
-    paintLessonPagination(root, lesson, moduleLessons);
+    paintLessonPagination(root, lesson, moduleLessons, data);
     paintSidebarCurriculum(root, lesson, mod, moduleLessons, moduleProgress);
     wireMarkComplete(root, lesson, data.member, data.ms, data.progress, data.tables);
     wireSaveActions(root, lesson, course, data.member, data.ms, data.savedLessons, data.tables);
@@ -2262,10 +2276,44 @@
     }
   }
 
-  function paintLessonPagination(root, lesson, moduleLessons) {
+  function paintLessonPagination(root, lesson, moduleLessons, data) {
     var i = moduleLessons.findIndex(function (l) { return recordId(l) === recordId(lesson); });
     var prev = i > 0 ? moduleLessons[i - 1] : null;
     var next = i >= 0 && i < moduleLessons.length - 1 ? moduleLessons[i + 1] : null;
+    var prevLabel = '← Previous Lesson';
+    var nextLabel = 'Next Lesson →';
+
+    // Fall through to the neighbouring module when there's no prev/next in
+    // the current one — so the last lesson of a module links to the first
+    // lesson of the next module, and vice versa.
+    if ((!prev || !next) && data && data.modules && data.lessons) {
+      var courseId = idOf(lesson.data.course);
+      var courseMods = data.modules
+        .filter(function (m) { return idOf(m.data.course) === courseId; })
+        .sort(byOrder);
+      var modIdx = courseMods.findIndex(function (m) { return recordId(m) === idOf(lesson.data.module); });
+
+      if (!prev && modIdx > 0) {
+        var prevModId = recordId(courseMods[modIdx - 1]);
+        var prevModLessons = data.lessons
+          .filter(function (l) { return idOf(l.data.module) === prevModId; })
+          .sort(byOrder);
+        if (prevModLessons.length) {
+          prev = prevModLessons[prevModLessons.length - 1];
+          prevLabel = '← Previous Module';
+        }
+      }
+      if (!next && modIdx !== -1 && modIdx < courseMods.length - 1) {
+        var nextModId = recordId(courseMods[modIdx + 1]);
+        var nextModLessons = data.lessons
+          .filter(function (l) { return idOf(l.data.module) === nextModId; })
+          .sort(byOrder);
+        if (nextModLessons.length) {
+          next = nextModLessons[0];
+          nextLabel = 'Next Module →';
+        }
+      }
+    }
 
     var prevCard = queryToken(root, 'prev-lesson') || queryToken(root, 'prev-module');
     var nextCard = queryToken(root, 'next-lesson') || queryToken(root, 'next-module');
@@ -2273,7 +2321,7 @@
     if (prevCard) {
       if (prev) {
         setDetailLink(prevCard, recordId(prev));
-        setLabel(prevCard, 'prev-label', '← Previous Lesson');
+        setLabel(prevCard, 'prev-label', prevLabel);
         fillField(prevCard, 'lesson.title', prev.data.title);
       } else {
         prevCard.removeAttribute('href');
@@ -2285,7 +2333,7 @@
     if (nextCard) {
       if (next) {
         setDetailLink(nextCard, recordId(next));
-        setLabel(nextCard, 'next-label', 'Next Lesson →');
+        setLabel(nextCard, 'next-label', nextLabel);
         fillField(nextCard, 'lesson.title', next.data.title);
       } else {
         nextCard.removeAttribute('href');

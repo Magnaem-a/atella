@@ -223,26 +223,40 @@
   }
 
   function resolveResumeLesson(enrollment, lessons, progress) {
-    // Priority 1: explicit current_lesson on enrollment.
+    // Build the completed-lesson set so we never resume to a finished lesson.
+    var completedIds = Object.create(null);
+    progress.forEach(function (p) {
+      if ((p.data.completed | 0) === 1) completedIds[idOf(p.data.lesson)] = true;
+    });
+
+    // Priority 1: explicit current_lesson on enrollment — but only if it's
+    // not already completed. Stale enrolment pointers (e.g. set at enrol time
+    // and never updated) used to keep the CTA stuck on "Lesson 01".
     if (enrollment) {
       var ids = arrayOfIds(enrollment.data.current_lesson);
       for (var i = 0; i < ids.length; i++) {
+        if (completedIds[ids[i]]) continue;
         var hit = lessons.find(function (l) { return l.id === ids[i]; });
         if (hit) return hit;
       }
     }
+    // Priority 2: most recently touched incomplete progress row.
     var sorted = progress.slice().sort(function (a, b) {
       return tsOf(b.data.last_watched_at || b.data.completed_at) - tsOf(a.data.last_watched_at || a.data.completed_at);
     });
-    // Priority 2: most recently touched incomplete lesson.
     for (var j = 0; j < sorted.length; j++) {
       if ((sorted[j].data.completed | 0) === 1) continue;
       var lid = idOf(sorted[j].data.lesson);
       var lesson = lessons.find(function (l) { return l.id === lid; });
       if (lesson) return lesson;
     }
-    // Priority 3: first lesson as a safe fallback.
-    return lessons[0] || null;
+    // Priority 3: first lesson the member hasn't completed yet (lessons here
+    // are already ordered by module → lesson).
+    for (var k = 0; k < lessons.length; k++) {
+      if (!completedIds[lessons[k].id]) return lessons[k];
+    }
+    // All lessons completed → resume points at the last one for "Re-watch".
+    return lessons[lessons.length - 1] || null;
   }
 
   // ============= CURRICULUM =============
