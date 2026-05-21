@@ -101,13 +101,30 @@
     var progress = data.progress.filter(function (p) { return idOf(p.data.course) === courseId; });
     var moduleProgress = progress.filter(function (p) { return idOf(p.data.lesson) && moduleLessons.some(function (l) { return recordId(l) === idOf(p.data.lesson); }); });
 
+    // Course-wide ordered lesson list — drives strict drip across modules,
+    // so a sidebar row in Module 2 stays locked while Module 1 is unfinished.
+    var courseModules = data.modules
+      .filter(function (m) { return idOf(m.data.course) === courseId; })
+      .sort(byOrder);
+    var modOrder = Object.create(null);
+    courseModules.forEach(function (m) { modOrder[recordId(m)] = m.data.order || 0; });
+    var courseLessons = data.lessons
+      .filter(function (l) { return idOf(l.data.course) === courseId; })
+      .sort(function (a, b) {
+        var modA = modOrder[idOf(a.data.module)] || 0;
+        var modB = modOrder[idOf(b.data.module)] || 0;
+        if (modA !== modB) return modA - modB;
+        return (a.data.order || 0) - (b.data.order || 0);
+      });
+    var courseUnlockedIndex = firstIncompleteIndex(courseLessons, progress);
+
     paintBreadcrumbs(root, lesson, mod, course);
     paintHero(root, lesson, mod, moduleLessons, moduleProgress);
     paintVideo(root, lesson);
     paintBreakdown(root, lesson, data.breakdown);
     paintResources(root, lesson, data.references);
     paintLessonPagination(root, lesson, moduleLessons, data);
-    paintSidebarCurriculum(root, lesson, mod, moduleLessons, moduleProgress);
+    paintSidebarCurriculum(root, lesson, mod, moduleLessons, moduleProgress, courseLessons, courseUnlockedIndex);
     wireMarkComplete(root, lesson, data.member, data.ms, data.progress, data.tables, data.enrollments);
     wireSaveActions(root, lesson, course, data.member, data.ms, data.savedLessons, data.tables);
     wireViewCourse(root, course);
@@ -534,7 +551,7 @@
     });
   }
 
-  function paintSidebarCurriculum(root, lesson, mod, moduleLessons, moduleProgress) {
+  function paintSidebarCurriculum(root, lesson, mod, moduleLessons, moduleProgress, courseLessons, courseUnlockedIndex) {
     var ctn = root.querySelector('[data-ms-code="curriculum"]');
     if (!ctn) return;
     var tpl = ctn.querySelector('[data-ms-code="lesson-template"]');
@@ -548,9 +565,9 @@
     if (moduleLink && mod) setDetailLink(moduleLink, recordId(mod));
     fillField(ctn, 'module.title', mod && mod.data.title);
 
-    var unlockedIndex = firstIncompleteIndex(moduleLessons, moduleProgress);
-
-    moduleLessons.forEach(function (l, idx) {
+    // Lock is computed against the full course order, not just this module —
+    // so a Module 2 row stays locked while any earlier lesson is incomplete.
+    moduleLessons.forEach(function (l) {
       var row = tpl.cloneNode(true);
       row.removeAttribute('data-ms-code');
       row.setAttribute('data-ms-clone', 'true');
@@ -558,7 +575,8 @@
 
       var done = isDone(recordId(l), moduleProgress);
       var current = recordId(l) === recordId(lesson);
-      var locked = !done && !current && unlockedIndex !== -1 && idx > unlockedIndex;
+      var courseIdx = (courseLessons || []).findIndex(function (cl) { return cl.id === recordId(l); });
+      var locked = !done && !current && courseUnlockedIndex !== -1 && courseIdx > courseUnlockedIndex;
 
       fillField(row, 'lesson.title', l.data.title);
       fillField(row, 'lesson.order', l.data.order);

@@ -1322,6 +1322,10 @@
     if (!modules.length) { showState(ctn, 'list-empty'); return; }
 
     var resumeLessonId = pickResumeLessonId(lessons, progress);
+    // Course-wide first-incomplete index drives the drip — only one "active"
+    // lesson across the whole course, everything after it is locked. This is
+    // what prevents Module 2 Lesson 1 unlocking before Module 1 is finished.
+    var courseUnlockedIndex = firstIncompleteIndex(lessons, progress);
 
     modules.forEach(function (mod) {
       var modClone = moduleTpl.cloneNode(true);
@@ -1348,13 +1352,13 @@
         var anchor = innerLessonTpl.parentNode;
         anchor.removeChild(innerLessonTpl);
         var modLessons = lessons.filter(function (l) { return idOf(l.data.module) === mod.id; });
-        var unlockedIndex = firstIncompleteIndex(modLessons, progress);
         modLessons.forEach(function (lesson) {
           var row = innerLessonTpl.cloneNode(true);
           row.removeAttribute('data-ms-code');
           row.setAttribute('data-ms-clone', 'true');
           row.style.display = '';
-          paintLessonRow(row, lesson, progress, resumeLessonId, modLessons, unlockedIndex);
+          // Lock is computed against the full course order, not just this module.
+          paintLessonRow(row, lesson, progress, resumeLessonId, lessons, courseUnlockedIndex);
           anchor.appendChild(row);
         });
       }
@@ -2180,13 +2184,30 @@
     var progress = data.progress.filter(function (p) { return idOf(p.data.course) === courseId; });
     var moduleProgress = progress.filter(function (p) { return idOf(p.data.lesson) && moduleLessons.some(function (l) { return recordId(l) === idOf(p.data.lesson); }); });
 
+    // Course-wide ordered lesson list — drives strict drip across modules,
+    // so a sidebar row in Module 2 stays locked while Module 1 is unfinished.
+    var courseModules = data.modules
+      .filter(function (m) { return idOf(m.data.course) === courseId; })
+      .sort(byOrder);
+    var modOrder = Object.create(null);
+    courseModules.forEach(function (m) { modOrder[recordId(m)] = m.data.order || 0; });
+    var courseLessons = data.lessons
+      .filter(function (l) { return idOf(l.data.course) === courseId; })
+      .sort(function (a, b) {
+        var modA = modOrder[idOf(a.data.module)] || 0;
+        var modB = modOrder[idOf(b.data.module)] || 0;
+        if (modA !== modB) return modA - modB;
+        return (a.data.order || 0) - (b.data.order || 0);
+      });
+    var courseUnlockedIndex = firstIncompleteIndex(courseLessons, progress);
+
     paintBreadcrumbs(root, lesson, mod, course);
     paintHero(root, lesson, mod, moduleLessons, moduleProgress);
     paintVideo(root, lesson);
     paintBreakdown(root, lesson, data.breakdown);
     paintResources(root, lesson, data.references);
     paintLessonPagination(root, lesson, moduleLessons, data);
-    paintSidebarCurriculum(root, lesson, mod, moduleLessons, moduleProgress);
+    paintSidebarCurriculum(root, lesson, mod, moduleLessons, moduleProgress, courseLessons, courseUnlockedIndex);
     wireMarkComplete(root, lesson, data.member, data.ms, data.progress, data.tables, data.enrollments);
     wireSaveActions(root, lesson, course, data.member, data.ms, data.savedLessons, data.tables);
     wireViewCourse(root, course);
@@ -2613,7 +2634,7 @@
     });
   }
 
-  function paintSidebarCurriculum(root, lesson, mod, moduleLessons, moduleProgress) {
+  function paintSidebarCurriculum(root, lesson, mod, moduleLessons, moduleProgress, courseLessons, courseUnlockedIndex) {
     var ctn = root.querySelector('[data-ms-code="curriculum"]');
     if (!ctn) return;
     var tpl = ctn.querySelector('[data-ms-code="lesson-template"]');
@@ -2627,9 +2648,9 @@
     if (moduleLink && mod) setDetailLink(moduleLink, recordId(mod));
     fillField(ctn, 'module.title', mod && mod.data.title);
 
-    var unlockedIndex = firstIncompleteIndex(moduleLessons, moduleProgress);
-
-    moduleLessons.forEach(function (l, idx) {
+    // Lock is computed against the full course order, not just this module —
+    // so a Module 2 row stays locked while any earlier lesson is incomplete.
+    moduleLessons.forEach(function (l) {
       var row = tpl.cloneNode(true);
       row.removeAttribute('data-ms-code');
       row.setAttribute('data-ms-clone', 'true');
@@ -2637,7 +2658,8 @@
 
       var done = isDone(recordId(l), moduleProgress);
       var current = recordId(l) === recordId(lesson);
-      var locked = !done && !current && unlockedIndex !== -1 && idx > unlockedIndex;
+      var courseIdx = (courseLessons || []).findIndex(function (cl) { return cl.id === recordId(l); });
+      var locked = !done && !current && courseUnlockedIndex !== -1 && courseIdx > courseUnlockedIndex;
 
       fillField(row, 'lesson.title', l.data.title);
       fillField(row, 'lesson.order', l.data.order);
@@ -2892,9 +2914,24 @@
       .sort(byOrder);
     var progress = data.progress.filter(function (p) { return idOf(p.data.course) === courseId; });
 
+    // Course-wide ordered lesson list — drip locking is computed against this,
+    // not against the module's own lessons, so Module 2 stays locked until
+    // Module 1 is finished.
+    var modOrder = Object.create(null);
+    courseModules.forEach(function (m) { modOrder[moduleRecordId(m)] = m.data.order || 0; });
+    var courseLessons = data.lessons
+      .filter(function (l) { return idOf(l.data.course) === courseId; })
+      .sort(function (a, b) {
+        var modA = modOrder[idOf(a.data.module)] || 0;
+        var modB = modOrder[idOf(b.data.module)] || 0;
+        if (modA !== modB) return modA - modB;
+        return (a.data.order || 0) - (b.data.order || 0);
+      });
+    var courseUnlockedIndex = firstIncompleteIndex(courseLessons, progress);
+
     paintHeader(root, mod, course, courseModules, moduleIndex, lessons, progress);
     paintBreadcrumbs(root, course, mod);
-    paintLessonList(root, lessons, progress);
+    paintLessonList(root, lessons, progress, courseLessons, courseUnlockedIndex);
     paintPagination(root, courseModules, moduleIndex);
   }
 
@@ -2934,7 +2971,7 @@
     if (moduleLink) setDetailLink(moduleLink, mod.id);
   }
 
-  function paintLessonList(root, lessons, progress) {
+  function paintLessonList(root, lessons, progress, courseLessons, courseUnlockedIndex) {
     var list = root.querySelector('[data-ms-code="lesson-list"]');
     var tpl = list ? list.querySelector('[data-ms-code="lesson-template"]') : null;
     if (!tpl) return;
@@ -2942,19 +2979,18 @@
     clearClones(list);
     tpl.style.display = 'none';
 
-    // Strict drip: the first incomplete lesson is the only unlocked
-    // incomplete lesson ("active"). Any incomplete lesson after that is locked.
-    var unlockedIndex = firstIncompleteIndex(lessons, progress);
-
-    lessons.forEach(function (lesson, idx) {
+    // Strict course-wide drip: a row is "active" only if it matches the
+    // course-level first-incomplete index; rows after that are locked.
+    lessons.forEach(function (lesson) {
       var row = tpl.cloneNode(true);
       row.removeAttribute('data-ms-code');
       row.setAttribute('data-ms-clone', 'true');
       row.style.display = '';
 
       var done = isLessonDone(lesson.id, progress);
-      var current = !done && idx === unlockedIndex;
-      var locked = !done && unlockedIndex !== -1 && idx > unlockedIndex;
+      var courseIdx = (courseLessons || []).findIndex(function (l) { return l.id === lesson.id; });
+      var current = !done && courseIdx === courseUnlockedIndex;
+      var locked = !done && courseUnlockedIndex !== -1 && courseIdx > courseUnlockedIndex;
 
       fillField(row, 'lesson.title', lesson.data.title);
       fillField(row, 'lesson.order', lesson.data.order);

@@ -74,9 +74,24 @@
       .sort(byOrder);
     var progress = data.progress.filter(function (p) { return idOf(p.data.course) === courseId; });
 
+    // Course-wide ordered lesson list — drip locking is computed against this,
+    // not against the module's own lessons, so Module 2 stays locked until
+    // Module 1 is finished.
+    var modOrder = Object.create(null);
+    courseModules.forEach(function (m) { modOrder[moduleRecordId(m)] = m.data.order || 0; });
+    var courseLessons = data.lessons
+      .filter(function (l) { return idOf(l.data.course) === courseId; })
+      .sort(function (a, b) {
+        var modA = modOrder[idOf(a.data.module)] || 0;
+        var modB = modOrder[idOf(b.data.module)] || 0;
+        if (modA !== modB) return modA - modB;
+        return (a.data.order || 0) - (b.data.order || 0);
+      });
+    var courseUnlockedIndex = firstIncompleteIndex(courseLessons, progress);
+
     paintHeader(root, mod, course, courseModules, moduleIndex, lessons, progress);
     paintBreadcrumbs(root, course, mod);
-    paintLessonList(root, lessons, progress);
+    paintLessonList(root, lessons, progress, courseLessons, courseUnlockedIndex);
     paintPagination(root, courseModules, moduleIndex);
   }
 
@@ -116,7 +131,7 @@
     if (moduleLink) setDetailLink(moduleLink, mod.id);
   }
 
-  function paintLessonList(root, lessons, progress) {
+  function paintLessonList(root, lessons, progress, courseLessons, courseUnlockedIndex) {
     var list = root.querySelector('[data-ms-code="lesson-list"]');
     var tpl = list ? list.querySelector('[data-ms-code="lesson-template"]') : null;
     if (!tpl) return;
@@ -124,19 +139,18 @@
     clearClones(list);
     tpl.style.display = 'none';
 
-    // Strict drip: the first incomplete lesson is the only unlocked
-    // incomplete lesson ("active"). Any incomplete lesson after that is locked.
-    var unlockedIndex = firstIncompleteIndex(lessons, progress);
-
-    lessons.forEach(function (lesson, idx) {
+    // Strict course-wide drip: a row is "active" only if it matches the
+    // course-level first-incomplete index; rows after that are locked.
+    lessons.forEach(function (lesson) {
       var row = tpl.cloneNode(true);
       row.removeAttribute('data-ms-code');
       row.setAttribute('data-ms-clone', 'true');
       row.style.display = '';
 
       var done = isLessonDone(lesson.id, progress);
-      var current = !done && idx === unlockedIndex;
-      var locked = !done && unlockedIndex !== -1 && idx > unlockedIndex;
+      var courseIdx = (courseLessons || []).findIndex(function (l) { return l.id === lesson.id; });
+      var current = !done && courseIdx === courseUnlockedIndex;
+      var locked = !done && courseUnlockedIndex !== -1 && courseIdx > courseUnlockedIndex;
 
       fillField(row, 'lesson.title', lesson.data.title);
       fillField(row, 'lesson.order', lesson.data.order);

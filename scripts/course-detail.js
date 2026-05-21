@@ -273,6 +273,10 @@
     if (!modules.length) { showState(ctn, 'list-empty'); return; }
 
     var resumeLessonId = pickResumeLessonId(lessons, progress);
+    // Course-wide first-incomplete index drives the drip — only one "active"
+    // lesson across the whole course, everything after it is locked. This is
+    // what prevents Module 2 Lesson 1 unlocking before Module 1 is finished.
+    var courseUnlockedIndex = firstIncompleteIndex(lessons, progress);
 
     modules.forEach(function (mod) {
       var modClone = moduleTpl.cloneNode(true);
@@ -299,13 +303,13 @@
         var anchor = innerLessonTpl.parentNode;
         anchor.removeChild(innerLessonTpl);
         var modLessons = lessons.filter(function (l) { return idOf(l.data.module) === mod.id; });
-        var unlockedIndex = firstIncompleteIndex(modLessons, progress);
         modLessons.forEach(function (lesson) {
           var row = innerLessonTpl.cloneNode(true);
           row.removeAttribute('data-ms-code');
           row.setAttribute('data-ms-clone', 'true');
           row.style.display = '';
-          paintLessonRow(row, lesson, progress, resumeLessonId, modLessons, unlockedIndex);
+          // Lock is computed against the full course order, not just this module.
+          paintLessonRow(row, lesson, progress, resumeLessonId, lessons, courseUnlockedIndex);
           anchor.appendChild(row);
         });
       }
