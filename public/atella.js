@@ -835,6 +835,16 @@
     var fill = card.querySelector('[data-ms-code="course-progress-fill"]');
     if (fill) fill.style.width = pct + '%';
 
+    // CTA label — "Get started" if untouched, "Continue" if in-progress,
+    // "Re-watch" if complete. Targets either data-ms-code (canonical) or
+    // data-dashboard="course-cta-label" (Webflow-side helper attribute).
+    var ctaLabel = card.querySelector('[data-ms-code="course-cta-label"], [data-dashboard="course-cta-label"]');
+    if (ctaLabel) {
+      ctaLabel.textContent = status === 'complete' ? 'Re-watch'
+        : status === 'in_progress' ? 'Continue'
+        : 'Get started';
+    }
+
     setDetailLinks(card, course.id);
   }
 
@@ -2113,7 +2123,8 @@
         safeLoad(ms, TABLES.breakdown, null),
         safeLoad(ms, TABLES.reference, null),
         ownerWhere ? mustLoad(ms, TABLES.progress, ownerWhere) : Promise.resolve([]),
-        ownerWhere ? safeLoad(ms, TABLES.savedLessons, ownerWhere) : Promise.resolve([])
+        ownerWhere ? safeLoad(ms, TABLES.savedLessons, ownerWhere) : Promise.resolve([]),
+        ownerWhere ? safeLoad(ms, TABLES.enrollment, ownerWhere) : Promise.resolve([])
       ]);
 
       var data = {
@@ -2124,6 +2135,7 @@
         references: loaded[4],
         progress: loaded[5],
         savedLessons: loaded[6],
+        enrollments: loaded[7],
         tables: TABLES,
         member: member,
         ms: ms
@@ -2176,7 +2188,7 @@
     paintResources(root, lesson, data.references);
     paintLessonPagination(root, lesson, moduleLessons, data);
     paintSidebarCurriculum(root, lesson, mod, moduleLessons, moduleProgress);
-    wireMarkComplete(root, lesson, data.member, data.ms, data.progress, data.tables);
+    wireMarkComplete(root, lesson, data.member, data.ms, data.progress, data.tables, data.enrollments);
     wireSaveActions(root, lesson, course, data.member, data.ms, data.savedLessons, data.tables);
     wireViewCourse(root, course);
 
@@ -2394,12 +2406,28 @@
     });
   }
 
-  function wireMarkComplete(root, lesson, member, ms, progressRows, tables) {
+  function wireMarkComplete(root, lesson, member, ms, progressRows, tables, enrollments) {
     var buttons = queryTokenAll(root, 'mark-complete');
     if (!buttons.length || !member || !ms) return;
     var lessonId = recordId(lesson);
+    var courseId = idOf(lesson.data.course);
     var doneState = isDone(lessonId, progressRows || []);
     paintCompletionState(root, doneState);
+
+    // Mark-complete requires an active enrolment for this course. Toggle an
+    // optional `data-ms-show-if="enrolled"` variant group (`yes`/`no`) so the
+    // design can show an "Enrol to track progress" CTA instead, and hide the
+    // mark-complete buttons themselves when the member isn't enrolled.
+    var enrolled = (enrollments || []).some(function (e) {
+      if (idOf(e.data.course) !== courseId) return false;
+      var s = String(e.data.status || 'active').toLowerCase();
+      return s !== 'dropped';
+    });
+    toggleVariants(root, 'enrolled', enrolled ? 'yes' : 'no');
+    if (!enrolled) {
+      buttons.forEach(function (btn) { btn.style.display = 'none'; });
+      return;
+    }
 
     buttons.forEach(function (btn) {
       btn.addEventListener('click', async function (e) {
@@ -2752,7 +2780,8 @@
       progress: root.getAttribute('ms-code-table-progress') || 'lesson_progress',
       savedLessons: root.getAttribute('ms-code-table-saved-lessons') || 'saved_lessons',
       breakdown: root.getAttribute('ms-code-table-breakdown') || 'lesson_breakdown',
-      reference: root.getAttribute('ms-code-table-reference') || 'reference'
+      reference: root.getAttribute('ms-code-table-reference') || 'reference',
+      enrollment: root.getAttribute('ms-code-table-enrollment') || 'enrollments'
     };
   }
 

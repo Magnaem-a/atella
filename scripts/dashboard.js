@@ -594,6 +594,16 @@
     var fill = card.querySelector('[data-ms-code="course-progress-fill"]');
     if (fill) fill.style.width = pct + '%';
 
+    // CTA label — "Get started" if untouched, "Continue" if in-progress,
+    // "Re-watch" if complete. Targets either data-ms-code (canonical) or
+    // data-dashboard="course-cta-label" (Webflow-side helper attribute).
+    var ctaLabel = card.querySelector('[data-ms-code="course-cta-label"], [data-dashboard="course-cta-label"]');
+    if (ctaLabel) {
+      ctaLabel.textContent = status === 'complete' ? 'Re-watch'
+        : status === 'in_progress' ? 'Continue'
+        : 'Get started';
+    }
+
     setDetailLinks(card, course.id);
   }
 
