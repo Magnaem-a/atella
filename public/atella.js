@@ -846,73 +846,52 @@
         : 'Get started';
     }
 
-    // Next-pending lesson info — only meaningful for in_progress cards. Tokens:
-    //   [data-ms-code="next-lesson-title"]   → "Streaming and response handling"
-    //   [data-ms-code="next-lesson-meta"]    → "Module 02 · Lesson 03"
-    //   [data-ms-code="remaining-lessons"]   → "7 left"
-    paintNextLesson(card, course, data, status, stats);
+    // Next-pending lesson title on in_progress cards — see paintNextLesson.
+    paintNextLesson(card, course, data, status);
 
     setDetailLinks(card, course.id);
   }
 
-  /** Resolve and write the "what's next" labels on an in-progress card. */
-  function paintNextLesson(card, course, data, status, stats) {
+  /**
+   * Fill [data-ms-code="next-lesson-title"] with the title of the next
+   * incomplete lesson, in course-wide order. Only populated on in_progress
+   * cards — hidden on not_started and complete.
+   */
+  function paintNextLesson(card, course, data, status) {
     var titleEl = card.querySelector('[data-ms-code="next-lesson-title"]');
-    var metaEl = card.querySelector('[data-ms-code="next-lesson-meta"]');
-    var remainEl = card.querySelector('[data-ms-code="remaining-lessons"]');
-    if (!titleEl && !metaEl && !remainEl) return;
+    if (!titleEl) return;
 
-    // Hide all three on cards where "next" doesn't apply.
     if (status !== 'in_progress') {
-      [titleEl, metaEl, remainEl].forEach(function (el) { if (el) el.style.display = 'none'; });
+      titleEl.style.display = 'none';
       return;
     }
 
     var courseId = course.id;
-    var modules = (data.modules || [])
-      .filter(function (m) { return C.idOf(m.data.course) === courseId; })
-      .sort(function (a, b) { return (a.data.order || 0) - (b.data.order || 0); });
     var modOrder = Object.create(null);
-    modules.forEach(function (m) { modOrder[m.id] = m.data.order || 0; });
+    (data.modules || []).forEach(function (m) {
+      if (C.idOf(m.data.course) === courseId) modOrder[m.id] = m.data.order || 0;
+    });
 
-    var courseLessons = data.lessons
+    var nextLesson = data.lessons
       .filter(function (l) { return C.idOf(l.data.course) === courseId; })
       .sort(function (a, b) {
         var modA = modOrder[C.idOf(a.data.module)] || 0;
         var modB = modOrder[C.idOf(b.data.module)] || 0;
         if (modA !== modB) return modA - modB;
         return (a.data.order || 0) - (b.data.order || 0);
+      })
+      .find(function (l) {
+        return !data.progress.some(function (p) {
+          return C.idOf(p.data.lesson) === l.id && (p.data.completed | 0) === 1;
+        });
       });
 
-    var completed = Object.create(null);
-    data.progress.forEach(function (p) {
-      if (C.idOf(p.data.course) === courseId && (p.data.completed | 0) === 1) {
-        completed[C.idOf(p.data.lesson)] = true;
-      }
-    });
-
-    var nextLesson = courseLessons.filter(function (l) { return !completed[l.id]; })[0];
     if (!nextLesson) {
-      [titleEl, metaEl, remainEl].forEach(function (el) { if (el) el.style.display = 'none'; });
+      titleEl.style.display = 'none';
       return;
     }
-
-    [titleEl, metaEl, remainEl].forEach(function (el) { if (el) el.style.removeProperty('display'); });
-
-    if (titleEl) titleEl.textContent = nextLesson.data.title || '';
-
-    if (metaEl) {
-      var mod = modules.find(function (m) { return m.id === C.idOf(nextLesson.data.module); });
-      var parts = [];
-      if (mod) parts.push('Module ' + C.pad2(mod.data.order));
-      parts.push('Lesson ' + C.pad2(nextLesson.data.order));
-      metaEl.textContent = parts.join(' · ');
-    }
-
-    if (remainEl) {
-      var remaining = Math.max(0, (stats.total || 0) - (stats.completed || 0));
-      remainEl.textContent = remaining + (remaining === 1 ? ' lesson left' : ' lessons left');
-    }
+    titleEl.style.removeProperty('display');
+    titleEl.textContent = nextLesson.data.title || '';
   }
 
   /** Show only the variant nodes whose data-ms-show-value matches the active value. */
