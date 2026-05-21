@@ -568,6 +568,9 @@
       if (status === 'locked' && !row.querySelector('[data-ms-show-if="status"][data-ms-show-value="locked"]')) {
         status = 'todo';
       }
+      // Expose the row's status as a data attribute so the whole row can be
+      // styled in Webflow with a selector like `.lesson_item[data-status="active"]`.
+      row.setAttribute('data-status', status);
       toggleVariants(row, 'status', status);
 
       if (locked) {

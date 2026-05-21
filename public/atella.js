@@ -2648,6 +2648,9 @@
       if (status === 'locked' && !row.querySelector('[data-ms-show-if="status"][data-ms-show-value="locked"]')) {
         status = 'todo';
       }
+      // Expose the row's status as a data attribute so the whole row can be
+      // styled in Webflow with a selector like `.lesson_item[data-status="active"]`.
+      row.setAttribute('data-status', status);
       toggleVariants(row, 'status', status);
 
       if (locked) {
@@ -2961,7 +2964,11 @@
       setLabel(row, 'lesson-order-label', 'Lesson ' + pad2(lesson.data.order || (idx + 1)));
       setLabel(row, 'lesson-duration-label', String(lesson.data.duration_minutes || 0) + ' min');
 
-      toggleVariants(row, 'status', done ? 'done' : (current ? 'active' : (locked ? 'locked' : 'todo')));
+      var status = done ? 'done' : (current ? 'active' : (locked ? 'locked' : 'todo'));
+      // Expose status as a data attribute so the whole row can be styled in
+      // Webflow with `.lesson_item[data-status="active"]`.
+      row.setAttribute('data-status', status);
+      toggleVariants(row, 'status', status);
       toggleVariants(row, 'action', done ? 'replay' : (current ? 'continue' : (locked ? 'locked' : 'start')));
 
       if (locked) {
