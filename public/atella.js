@@ -1428,6 +1428,9 @@
     // If markup has no explicit locked variant, degrade to todo so row stays visible.
     if (status === 'locked' && !hasVariant(row, 'status', 'locked')) status = 'todo';
 
+    // Expose status on the row so the whole row can be styled with
+    // [data-status="active"] etc., consistent with the other lesson lists.
+    row.setAttribute('data-status', status);
     toggleVariants(row, 'status', status);
     if (status === 'locked') {
       row.removeAttribute('href');
