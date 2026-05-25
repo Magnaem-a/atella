@@ -2704,15 +2704,19 @@
       row.style.display = '';
 
       var done = isDone(recordId(l), moduleProgress);
-      var current = recordId(l) === recordId(lesson);
+      var viewing = recordId(l) === recordId(lesson);
       var courseIdx = (courseLessons || []).findIndex(function (cl) { return cl.id === recordId(l); });
-      var locked = !done && !current && courseUnlockedIndex !== -1 && courseIdx > courseUnlockedIndex;
+      // "active" = the resume lesson (course-wide first incomplete), so the
+      // purple play icon marks where to continue — independent of which page
+      // is open. "viewing" is tracked separately below.
+      var isActive = !done && courseUnlockedIndex !== -1 && courseIdx === courseUnlockedIndex;
+      var locked = !done && !viewing && courseUnlockedIndex !== -1 && courseIdx > courseUnlockedIndex;
 
       fillField(row, 'lesson.title', l.data.title);
       fillField(row, 'lesson.order', l.data.order);
       fillField(row, 'lesson.duration_minutes', l.data.duration_minutes || 0);
 
-      var status = done ? 'done' : (current ? 'active' : (locked ? 'locked' : 'todo'));
+      var status = done ? 'done' : (isActive ? 'active' : (locked ? 'locked' : 'todo'));
       if (status === 'locked' && !row.querySelector('[data-ms-show-if="status"][data-ms-show-value="locked"]')) {
         status = 'todo';
       }
@@ -2720,6 +2724,13 @@
       // styled in Webflow with a selector like `.lesson_item[data-status="active"]`.
       row.setAttribute('data-status', status);
       toggleVariants(row, 'status', status);
+
+      // Mark the lesson whose page is currently open — independent of status,
+      // so the row the member is viewing can get its own highlight (e.g. a
+      // darker background) via `.lesson_item[data-current="true"]`. Also drives
+      // an optional `data-ms-show-if="current"` (yes/no) variant group.
+      if (viewing) row.setAttribute('data-current', 'true');
+      toggleVariants(row, 'current', viewing ? 'yes' : 'no');
 
       if (locked) {
         row.removeAttribute('href');
