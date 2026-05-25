@@ -1197,6 +1197,8 @@
     var instructor = findInstructor(data.instructors, courseId);
     var outcomes = (data.outcomes || []).filter(function (o) { return idOf(o.data.course) === courseId; }).sort(byOrder);
 
+    applyPageMeta(root, course.data.title, course.data.description);
+
     hideModals(root);
     // Paint read-only UI blocks first...
     paintHero(root, course, modules, lessons, progress, enrollment);
@@ -2123,6 +2125,25 @@
     return '[data-ms-code="' + key + '"]';
   }
 
+  // Update the browser/tab title (and meta description) once the record is
+  // resolved. Optional `ms-code-title-suffix` on the page wrapper appends a
+  // brand suffix, e.g. title="Lesson 1" + suffix="Atella" → "Lesson 1 · Atella".
+  function applyPageMeta(root, title, description) {
+    if (title) {
+      var suffix = root && root.getAttribute('ms-code-title-suffix');
+      document.title = suffix ? (title + ' · ' + suffix) : title;
+    }
+    if (description) {
+      var meta = document.head.querySelector('meta[name="description"]');
+      if (!meta) {
+        meta = document.createElement('meta');
+        meta.setAttribute('name', 'description');
+        document.head.appendChild(meta);
+      }
+      meta.setAttribute('content', String(description).slice(0, 320));
+    }
+  }
+
   function queryToken(scope, key) {
     return scope ? scope.querySelector(tokenSelector(key)) : null;
   }
@@ -2250,6 +2271,8 @@
         return (a.data.order || 0) - (b.data.order || 0);
       });
     var courseUnlockedIndex = firstIncompleteIndex(courseLessons, progress);
+
+    applyPageMeta(root, lesson.data.title, lesson.data.description);
 
     paintBreadcrumbs(root, lesson, mod, course);
     paintHero(root, lesson, mod, moduleLessons, moduleProgress);
@@ -2874,6 +2897,24 @@
     return '[data-ms-code="' + token + '"]';
   }
 
+  // Update the tab title (and meta description) once the lesson resolves.
+  // Optional `ms-code-title-suffix` on the page wrapper appends a brand suffix.
+  function applyPageMeta(root, title, description) {
+    if (title) {
+      var suffix = root && root.getAttribute('ms-code-title-suffix');
+      document.title = suffix ? (title + ' · ' + suffix) : title;
+    }
+    if (description) {
+      var meta = document.head.querySelector('meta[name="description"]');
+      if (!meta) {
+        meta = document.createElement('meta');
+        meta.setAttribute('name', 'description');
+        document.head.appendChild(meta);
+      }
+      meta.setAttribute('content', String(description).slice(0, 320));
+    }
+  }
+
   function queryToken(scope, token) {
     return scope ? scope.querySelector(tokenSelector(token)) : null;
   }
@@ -2989,6 +3030,8 @@
         return (a.data.order || 0) - (b.data.order || 0);
       });
     var courseUnlockedIndex = firstIncompleteIndex(courseLessons, progress);
+
+    applyPageMeta(root, mod.data.title, mod.data.description);
 
     paintHeader(root, mod, course, courseModules, moduleIndex, lessons, progress);
     paintBreadcrumbs(root, course, mod);
@@ -3214,6 +3257,24 @@
   // Token selectors (MS-only).
   function tokenSelector(token) {
     return '[data-ms-code="' + token + '"]';
+  }
+
+  // Update the tab title (and meta description) once the module resolves.
+  // Optional `ms-code-title-suffix` on the page wrapper appends a brand suffix.
+  function applyPageMeta(root, title, description) {
+    if (title) {
+      var suffix = root && root.getAttribute('ms-code-title-suffix');
+      document.title = suffix ? (title + ' · ' + suffix) : title;
+    }
+    if (description) {
+      var meta = document.head.querySelector('meta[name="description"]');
+      if (!meta) {
+        meta = document.createElement('meta');
+        meta.setAttribute('name', 'description');
+        document.head.appendChild(meta);
+      }
+      meta.setAttribute('content', String(description).slice(0, 320));
+    }
   }
 
   function queryToken(scope, token) {

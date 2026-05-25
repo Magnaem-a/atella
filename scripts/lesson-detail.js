@@ -118,6 +118,8 @@
       });
     var courseUnlockedIndex = firstIncompleteIndex(courseLessons, progress);
 
+    applyPageMeta(root, lesson.data.title, lesson.data.description);
+
     paintBreadcrumbs(root, lesson, mod, course);
     paintHero(root, lesson, mod, moduleLessons, moduleProgress);
     paintVideo(root, lesson);
@@ -739,6 +741,24 @@
 
   function tokenSelector(token) {
     return '[data-ms-code="' + token + '"]';
+  }
+
+  // Update the tab title (and meta description) once the lesson resolves.
+  // Optional `ms-code-title-suffix` on the page wrapper appends a brand suffix.
+  function applyPageMeta(root, title, description) {
+    if (title) {
+      var suffix = root && root.getAttribute('ms-code-title-suffix');
+      document.title = suffix ? (title + ' · ' + suffix) : title;
+    }
+    if (description) {
+      var meta = document.head.querySelector('meta[name="description"]');
+      if (!meta) {
+        meta = document.createElement('meta');
+        meta.setAttribute('name', 'description');
+        document.head.appendChild(meta);
+      }
+      meta.setAttribute('content', String(description).slice(0, 320));
+    }
   }
 
   function queryToken(scope, token) {
