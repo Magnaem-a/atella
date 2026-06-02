@@ -694,7 +694,7 @@
   var ui = window.DashboardListSlots;
 
   var CONFIG = {
-    DEFAULT_PER_PAGE: 5,
+    DEFAULT_PER_PAGE: 6,
     META_FIELD_FALLBACKS: ['meta_text', 'message', 'description'],
     DATE_FIELD_FALLBACKS: ['created_at', 'createdAt', 'timestamp'],
 

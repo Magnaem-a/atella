@@ -935,7 +935,7 @@
   var ui = window.DashboardListSlots;
 
   var CONFIG = {
-    DEFAULT_PER_PAGE: 5,
+    DEFAULT_PER_PAGE: 6,
     META_FIELD_FALLBACKS: ['meta_text', 'message', 'description'],
     DATE_FIELD_FALLBACKS: ['created_at', 'createdAt', 'timestamp'],
 
@@ -2631,6 +2631,10 @@
               }
             }
             window.MSDataCache.invalidate(tables.activity);
+
+            // After any todo→done write, check whether this push the streak
+            // over a milestone (3, 7, 14, …) and emit one row if so.
+            await maybeLogStreakMilestone(ms, member, tables);
           }
 
           window.location.reload();
@@ -2718,6 +2722,68 @@
     if (!member) return '';
     var cf = member.customFields || member.profileFields || {};
     return cf.name || cf['first-name'] || cf.firstName || member.email || '';
+  }
+
+  // Day streaks worth celebrating in the activity feed. Add or remove as you
+  // like — anything in this list triggers a single streak_milestone row.
+  var STREAK_MILESTONES = [3, 7, 14, 30, 60, 100, 365];
+
+  // Compute the member's current consecutive-day streak from lesson_progress
+  // rows. Mirrors the dashboard's streak count so the milestone matches what
+  // the strip displays. Returns 0 if no rows or the streak has lapsed.
+  function computeStreakDays(progressRows) {
+    var DAY = 86400000, days = {};
+    (progressRows || []).forEach(function (r) {
+      var d = r.data || {};
+      var ts = d.last_watched_at || d.completed_at;
+      if (!ts) return;
+      var date = new Date(ts);
+      if (isNaN(date.getTime())) return;
+      date.setHours(0, 0, 0, 0);
+      days[date.getTime()] = true;
+    });
+    var sorted = Object.keys(days).map(Number).sort(function (a, b) { return b - a; });
+    if (!sorted.length) return 0;
+    var today = new Date(); today.setHours(0, 0, 0, 0);
+    var cursor = today.getTime();
+    if (sorted[0] !== cursor && sorted[0] !== cursor - DAY) return 0;
+    if (sorted[0] === cursor - DAY) cursor -= DAY;
+    var streak = 0;
+    for (var i = 0; i < sorted.length; i++) {
+      if (sorted[i] === cursor) { streak++; cursor -= DAY; }
+      else if (sorted[i] < cursor) break;
+    }
+    return streak;
+  }
+
+  // After a lesson_progress write, check whether the resulting streak hits
+  // one of the milestones above. If so — and if we haven't already logged
+  // the same milestone in the last 24 hours — emit a streak_milestone
+  // activity row so the dashboard feed picks it up.
+  async function maybeLogStreakMilestone(ms, member, tables) {
+    if (!member || !ms || !window.MSDataCache || !tables || !tables.activity) return;
+    try {
+      var progress = await loadProgressFresh(ms, tables, member.id);
+      var streak = computeStreakDays(progress);
+      if (STREAK_MILESTONES.indexOf(streak) === -1) return;
+
+      var metaText = streak + '-day streak!';
+      window.MSDataCache.invalidate(tables.activity);
+      var activities = await window.MSDataCache.load(ms, tables.activity, { owner: { equals: member.id } });
+      var cutoff = Date.now() - 24 * 60 * 60 * 1000;
+      var alreadyEmitted = (activities || []).some(function (a) {
+        if (!a.data || a.data.type !== 'streak_milestone') return false;
+        if (a.data.meta_text !== metaText) return false;
+        var ts = new Date(a.data.created_at).getTime();
+        return !isNaN(ts) && ts > cutoff;
+      });
+      if (alreadyEmitted) return;
+
+      await logActivity(ms, member, tables, { type: 'streak_milestone', meta_text: metaText });
+      window.MSDataCache.invalidate(tables.activity);
+    } catch (err) {
+      console.error(LABEL + ' streak milestone check failed', err);
+    }
   }
 
   // Write an activity row. Fire-and-forget: a failed log should never block
