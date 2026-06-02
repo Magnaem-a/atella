@@ -450,16 +450,37 @@
     var ms = window.$memberstackDom;
     var tableProgress = C.tableAttr('ms-code-table-progress', 'lesson_progress');
     var tableLesson = C.tableAttr('ms-code-table-lesson', 'lessons');
+    var tableEnrollment = C.tableAttr('ms-code-table-enrollment', 'enrollments');
     try {
       var member = await window.MSDataCache.getMember(ms);
       if (!member) return;
       var loaded = await Promise.all([
         window.MSDataCache.load(ms, tableProgress, { owner: { equals: member.id } }),
-        window.MSDataCache.load(ms, tableLesson, null)
+        window.MSDataCache.load(ms, tableLesson, null),
+        // Enrolments may legitimately be empty or missing — fall back to []
+        // so a missing/blocked table doesn't take down the stats strip.
+        window.MSDataCache.load(ms, tableEnrollment, { owner: { equals: member.id } })
+          .catch(function () { return []; })
       ]);
       var progress = loaded[0];
       var lessons = loaded[1];
-      paintLessonsTotal(lessons.length);
+      var enrollments = loaded[2];
+
+      // "lessons-total" now reflects lessons in the member's actively enrolled
+      // courses (status not 'dropped'), so "10 / 30" reads as "10 of your 30
+      // enrolled lessons done", not "10 of the whole catalogue".
+      var enrolledCourseIds = Object.create(null);
+      enrollments.forEach(function (e) {
+        var s = String(e.data.status || 'active').toLowerCase();
+        if (s === 'dropped') return;
+        var cid = C.idOf(e.data.course);
+        if (cid) enrolledCourseIds[cid] = true;
+      });
+      var enrolledLessons = lessons.filter(function (l) {
+        return enrolledCourseIds[C.idOf(l.data.course)];
+      });
+
+      paintLessonsTotal(enrolledLessons.length);
       paintStreak(computeStreak(progress));
       paintCountStats(progress, member);
     } catch (err) {
