@@ -2551,11 +2551,15 @@
     // optional `data-ms-show-if="enrolled"` variant group (`yes`/`no`) so the
     // design can show an "Enrol to track progress" CTA instead, and hide the
     // mark-complete buttons themselves when the member isn't enrolled.
-    var enrolled = (enrollments || []).some(function (e) {
+    // Look up the active (non-dropped) enrolment for this course. We keep
+    // a reference (not just a boolean) so the click handler can flip its
+    // status to 'completed' / 'active' as the course finishes or un-finishes.
+    var memberEnrollment = (enrollments || []).find(function (e) {
       if (idOf(e.data.course) !== courseId) return false;
       var s = String(e.data.status || 'active').toLowerCase();
       return s !== 'dropped';
-    });
+    }) || null;
+    var enrolled = !!memberEnrollment;
     toggleVariants(root, 'enrolled', enrolled ? 'yes' : 'no');
     if (!enrolled) {
       buttons.forEach(function (btn) { btn.style.display = 'none'; });
@@ -2605,7 +2609,7 @@
           paintCompletionState(root, doneState);
           window.MSDataCache.invalidate(tables.progress);
 
-          // Activity log — only on todo → done transitions, never on un-mark.
+          // Activity log + enrolment-status flip — only on todo → done transitions.
           if (wentToDone) {
             await logActivity(ms, member, tables, {
               type: 'lesson_complete',
@@ -2613,10 +2617,11 @@
               course: courseId,
               meta_text: 'Completed: ' + (lesson.data.title || 'a lesson')
             });
-            // If this completion finishes the whole course, log course_complete too.
+            // If this completion finishes the whole course, log course_complete
+            // AND flip the enrolment row's status to 'completed' so the schema
+            // truthfully reflects "course done".
             if (course && courseLessons && courseLessons.length) {
               var completedIds = Object.create(null);
-              // Use the just-written state: existing rows + this one as completed.
               (fresh || []).forEach(function (p) {
                 if ((p.data.completed | 0) === 1) completedIds[idOf(p.data.lesson)] = true;
               });
@@ -2628,13 +2633,44 @@
                   course: courseId,
                   meta_text: 'Completed ' + (course.data.title || 'the course')
                 });
+                if (memberEnrollment) {
+                  var currentStatus = String(memberEnrollment.data.status || 'active').toLowerCase();
+                  var enrId = recordId(memberEnrollment);
+                  if (enrId && currentStatus !== 'completed') {
+                    try {
+                      await writeWithRetry(function () {
+                        return ms.updateDataRecord({ recordId: enrId, data: { status: 'completed' } });
+                      }, 'enrollment-complete');
+                      window.MSDataCache.invalidate(tables.enrollment);
+                    } catch (e) {
+                      console.error(LABEL + ' enrolment → completed failed', e);
+                    }
+                  }
+                }
               }
             }
             window.MSDataCache.invalidate(tables.activity);
 
-            // After any todo→done write, check whether this push the streak
+            // After any todo→done write, check whether this pushes the streak
             // over a milestone (3, 7, 14, …) and emit one row if so.
             await maybeLogStreakMilestone(ms, member, tables);
+          } else {
+            // Un-mark: if the enrolment was previously 'completed' (because the
+            // course was 100% done), revert to 'active' — the course no longer is.
+            if (memberEnrollment) {
+              var wasCompleted = String(memberEnrollment.data.status || 'active').toLowerCase() === 'completed';
+              var enrId2 = recordId(memberEnrollment);
+              if (wasCompleted && enrId2) {
+                try {
+                  await writeWithRetry(function () {
+                    return ms.updateDataRecord({ recordId: enrId2, data: { status: 'active' } });
+                  }, 'enrollment-reactivate');
+                  window.MSDataCache.invalidate(tables.enrollment);
+                } catch (e) {
+                  console.error(LABEL + ' enrolment → active (revert) failed', e);
+                }
+              }
+            }
           }
 
           window.location.reload();
