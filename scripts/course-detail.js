@@ -665,6 +665,13 @@
             data: { owner: member.id, course: course.id, saved_at: new Date().toISOString() }
           });
         }, 'save-course');
+        // Activity log — only when we actually saved (not on unsave).
+        await logActivity(ms, member, TABLES, {
+          type: 'course_saved',
+          course: course.id,
+          meta_text: 'Saved ' + (course.data.title || 'a course')
+        });
+        window.MSDataCache.invalidate(TABLES.activity);
       }
       window.MSDataCache.invalidate(TABLES.savedCourses);
       window.location.reload();
@@ -913,6 +920,39 @@
       console.warn(LABEL + ' could not find id on record — keys:', Object.keys(r), r);
     }
     return id || null;
+  }
+
+  // Best-effort member-display name, denormalized onto activity rows so
+  // the dashboard feed can show "Marlowe saved: Course X" even if the
+  // member's name changes later.
+  function actorName(member) {
+    if (!member) return '';
+    var cf = member.customFields || member.profileFields || {};
+    return cf.name || cf['first-name'] || cf.firstName || member.email || '';
+  }
+
+  // Write an activity row. Fire-and-forget on the inside — never blocks the
+  // user action that produced it. `payload` carries type + optional lesson/
+  // course refs + meta_text.
+  function logActivity(ms, member, tables, payload) {
+    if (!member || !ms || !window.MSDataCache || !tables || !tables.activity) {
+      return Promise.resolve();
+    }
+    var row = {
+      owner: member.id,
+      type: payload.type,
+      actor_name: actorName(member),
+      meta_text: payload.meta_text || '',
+      created_at: new Date().toISOString()
+    };
+    if (payload.lesson) row.lesson = payload.lesson;
+    if (payload.course) row.course = payload.course;
+    if (payload.link_url) row.link_url = payload.link_url;
+    return writeWithRetry(function () {
+      return ms.createDataRecord({ table: tables.activity, data: row });
+    }, 'activity:' + payload.type).catch(function (err) {
+      console.error(LABEL + ' activity log failed (' + payload.type + ')', err);
+    });
   }
 
   // Run a single write through MSDataCache.runWrites so it inherits 429

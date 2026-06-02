@@ -127,7 +127,7 @@
     paintResources(root, lesson, data.references);
     paintLessonPagination(root, lesson, moduleLessons, data);
     paintSidebarCurriculum(root, lesson, mod, moduleLessons, moduleProgress, courseLessons, courseUnlockedIndex);
-    wireMarkComplete(root, lesson, data.member, data.ms, data.progress, data.tables, data.enrollments);
+    wireMarkComplete(root, lesson, course, courseLessons, data.member, data.ms, data.progress, data.tables, data.enrollments);
     wireSaveActions(root, lesson, course, data.member, data.ms, data.savedLessons, data.tables);
     wireViewCourse(root, course);
 
@@ -345,7 +345,7 @@
     });
   }
 
-  function wireMarkComplete(root, lesson, member, ms, progressRows, tables, enrollments) {
+  function wireMarkComplete(root, lesson, course, courseLessons, member, ms, progressRows, tables, enrollments) {
     var buttons = queryTokenAll(root, 'mark-complete');
     if (!buttons.length || !member || !ms) return;
     var lessonId = recordId(lesson);
@@ -406,9 +406,39 @@
               return ms.createDataRecord({ table: tables.progress, data: payloadDone });
             }, 'mark-complete');
           }
+          var wentToDone = !doneState; // doneState here is the value before the flip
           doneState = !doneState;
           paintCompletionState(root, doneState);
           window.MSDataCache.invalidate(tables.progress);
+
+          // Activity log — only on todo → done transitions, never on un-mark.
+          if (wentToDone) {
+            await logActivity(ms, member, tables, {
+              type: 'lesson_complete',
+              lesson: lessonId,
+              course: courseId,
+              meta_text: 'Completed: ' + (lesson.data.title || 'a lesson')
+            });
+            // If this completion finishes the whole course, log course_complete too.
+            if (course && courseLessons && courseLessons.length) {
+              var completedIds = Object.create(null);
+              // Use the just-written state: existing rows + this one as completed.
+              (fresh || []).forEach(function (p) {
+                if ((p.data.completed | 0) === 1) completedIds[idOf(p.data.lesson)] = true;
+              });
+              completedIds[lessonId] = true; // we just marked this one
+              var allDone = courseLessons.every(function (l) { return completedIds[recordId(l)]; });
+              if (allDone) {
+                await logActivity(ms, member, tables, {
+                  type: 'course_complete',
+                  course: courseId,
+                  meta_text: 'Completed ' + (course.data.title || 'the course')
+                });
+              }
+            }
+            window.MSDataCache.invalidate(tables.activity);
+          }
+
           window.location.reload();
         } catch (err) {
           console.error(LABEL + ' mark complete failed', err);
@@ -487,6 +517,39 @@
     return Promise.resolve().then(thunk);
   }
 
+  // Best-effort member-display name, denormalized onto activity rows so the
+  // dashboard feed can show "Marlowe completed: Lesson 1" even if the
+  // member's name changes later.
+  function actorName(member) {
+    if (!member) return '';
+    var cf = member.customFields || member.profileFields || {};
+    return cf.name || cf['first-name'] || cf.firstName || member.email || '';
+  }
+
+  // Write an activity row. Fire-and-forget: a failed log should never block
+  // the user action that produced it. `payload` carries type + (optional)
+  // lesson/course refs + meta_text.
+  function logActivity(ms, member, tables, payload) {
+    if (!member || !ms || !window.MSDataCache || !tables || !tables.activity) {
+      return Promise.resolve();
+    }
+    var row = {
+      owner: member.id,
+      type: payload.type,
+      actor_name: actorName(member),
+      meta_text: payload.meta_text || '',
+      created_at: new Date().toISOString()
+    };
+    if (payload.lesson) row.lesson = payload.lesson;
+    if (payload.course) row.course = payload.course;
+    if (payload.link_url) row.link_url = payload.link_url;
+    return writeWithRetry(function () {
+      return ms.createDataRecord({ table: tables.activity, data: row });
+    }, 'activity:' + payload.type).catch(function (err) {
+      console.error(LABEL + ' activity log failed (' + payload.type + ')', err);
+    });
+  }
+
   function paintCompletionState(root, done) {
     var buttons = queryTokenAll(root, 'mark-complete');
     if (!buttons.length) return;
@@ -531,6 +594,14 @@
             }, 'save-lesson');
             var fresh = await window.MSDataCache.load(ms, tables.savedLessons, { owner: { equals: member.id } });
             savedLessonRow = fresh.find(function (r) { return idOf(r.data.lesson) === lessonId; }) || null;
+            // Activity log — only when we actually saved (not on unsave).
+            await logActivity(ms, member, tables, {
+              type: 'lesson_saved',
+              lesson: lessonId,
+              course: courseId,
+              meta_text: 'Saved: ' + (lesson.data.title || 'a lesson')
+            });
+            window.MSDataCache.invalidate(tables.activity);
           }
           window.MSDataCache.invalidate(tables.savedLessons);
           paintSaveState(root, 'lesson', !!savedLessonRow);
@@ -733,6 +804,7 @@
       lesson: root.getAttribute('ms-code-table-lesson') || 'lessons',
       progress: root.getAttribute('ms-code-table-progress') || 'lesson_progress',
       savedLessons: root.getAttribute('ms-code-table-saved-lessons') || 'saved_lessons',
+      activity: root.getAttribute('ms-code-table-activity') || 'activity',
       breakdown: root.getAttribute('ms-code-table-breakdown') || 'lesson_breakdown',
       reference: root.getAttribute('ms-code-table-reference') || 'reference',
       enrollment: root.getAttribute('ms-code-table-enrollment') || 'enrollments'
